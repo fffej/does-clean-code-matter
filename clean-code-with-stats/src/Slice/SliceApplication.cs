@@ -4,7 +4,7 @@ public sealed class SliceApplication
 {
     private readonly Stream _output;
     private readonly TextWriter _error;
-    private readonly CsvColumnSelector _columnSelector = new();
+    private readonly CsvTableProcessor _csvProcessor = new();
 
     public SliceApplication(Stream output, TextWriter error)
     {
@@ -14,9 +14,9 @@ public sealed class SliceApplication
 
     public async Task<int> RunAsync(IReadOnlyList<string> args)
     {
-        if (args.Count != 3 || !string.Equals(args[1], "select", StringComparison.Ordinal))
+        if (args.Count != 3)
         {
-            await _error.WriteLineAsync("Usage: slice <csv-file> select <columns>");
+            await _error.WriteLineAsync("Usage: slice <csv-file> select <columns> | where <expression>");
             return 1;
         }
 
@@ -27,18 +27,30 @@ public sealed class SliceApplication
             return 1;
         }
 
-        IReadOnlyList<string> selectedColumns = _columnSelector.ParseRequestedColumns(args[2]);
-
         await using var input = File.OpenRead(inputPath);
-        var selectionResult = await _columnSelector.WriteSelectedColumnsAsync(input, _output, selectedColumns)
-            .ConfigureAwait(false);
+        var command = args[1];
+        var commandArgument = args[2];
 
-        if (selectionResult is not null)
+        string? result = command switch
         {
-            await _error.WriteLineAsync(selectionResult);
-            return 1;
+            "select" => await ExecuteSelectAsync(input, commandArgument).ConfigureAwait(false),
+            "where" => await _csvProcessor.WriteFilteredRowsAsync(input, _output, commandArgument).ConfigureAwait(false),
+            _ => "Usage: slice <csv-file> select <columns> | where <expression>"
+        };
+
+        if (result is null)
+        {
+            return 0;
         }
 
-        return 0;
+        await _error.WriteLineAsync(result);
+        return 1;
     }
+
+    private Task<string?> ExecuteSelectAsync(Stream input, string columnsArgument)
+    {
+        IReadOnlyList<string> selectedColumns = _csvProcessor.ParseRequestedColumns(columnsArgument);
+        return _csvProcessor.WriteSelectedColumnsAsync(input, _output, selectedColumns);
+    }
+
 }
