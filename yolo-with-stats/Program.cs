@@ -12,17 +12,37 @@ public static class SliceApp
 {
     public static int Run(string[] args, TextWriter stderr, Stream outputStream)
     {
-        if (args.Length != 3 || !string.Equals(args[1], "select", StringComparison.Ordinal))
+        if (args.Length < 3)
         {
-            stderr.WriteLine("Usage: slice <csv-file> select <column1,column2,...>");
+            WriteUsage(stderr);
             return 1;
         }
 
         try
         {
-            var selectedColumns = args[2]
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            CsvRoundTripper.WriteSelectedColumns(args[0], selectedColumns, outputStream);
+            if (string.Equals(args[1], "select", StringComparison.Ordinal))
+            {
+                if (args.Length != 3)
+                {
+                    WriteUsage(stderr);
+                    return 1;
+                }
+
+                var selectedColumns = args[2]
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                CsvRoundTripper.WriteSelectedColumns(args[0], selectedColumns, outputStream);
+            }
+            else if (string.Equals(args[1], "where", StringComparison.Ordinal))
+            {
+                var expression = string.Join(' ', args.Skip(2));
+                CsvRoundTripper.WriteFilteredRows(args[0], expression, outputStream);
+            }
+            else
+            {
+                WriteUsage(stderr);
+                return 1;
+            }
+
             return 0;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
@@ -30,6 +50,12 @@ public static class SliceApp
             stderr.WriteLine(ex.Message);
             return 1;
         }
+    }
+
+    private static void WriteUsage(TextWriter stderr)
+    {
+        stderr.WriteLine("Usage: slice <csv-file> select <column1,column2,...>");
+        stderr.WriteLine("   or: slice <csv-file> where <column><operator><value>");
     }
 }
 
@@ -72,6 +98,131 @@ public static class CsvRoundTripper
         }
 
         writer.Flush();
+    }
+
+    public static void WriteFilteredRows(string path, string expression, Stream output)
+    {
+        var filter = ParseComparisonExpression(expression);
+
+        using var reader = new StreamReader(File.OpenRead(path));
+        using var writer = new StreamWriter(output, leaveOpen: true)
+        {
+            NewLine = Environment.NewLine
+        };
+
+        var headerLine = reader.ReadLine() ?? throw new InvalidOperationException("CSV file is empty");
+        var headers = ParseCsvLine(headerLine);
+        var headerIndexes = headers
+            .Select((header, index) => new { header, index })
+            .ToDictionary(x => x.header, x => x.index, StringComparer.Ordinal);
+
+        if (!headerIndexes.TryGetValue(filter.ColumnName, out var filterColumnIndex))
+        {
+            throw new InvalidOperationException($"Column not found: {filter.ColumnName}");
+        }
+
+        writer.WriteLine(headerLine);
+
+        string? line;
+        while ((line = reader.ReadLine()) is not null)
+        {
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
+            var values = ParseCsvLine(line);
+            var leftValue = GetValue(values, filterColumnIndex);
+            if (Matches(leftValue, filter.Operator, filter.Value))
+            {
+                writer.WriteLine(line);
+            }
+        }
+
+        writer.Flush();
+    }
+
+    private static string GetValue(IReadOnlyList<string> values, int index)
+    {
+        return index < values.Count ? values[index] : string.Empty;
+    }
+
+    private static bool Matches(string leftValue, ComparisonOperator op, string rightValue)
+    {
+        if (TryParseNumber(leftValue, out var leftNumber) && TryParseNumber(rightValue, out var rightNumber))
+        {
+            return op switch
+            {
+                ComparisonOperator.Equal => leftNumber == rightNumber,
+                ComparisonOperator.NotEqual => leftNumber != rightNumber,
+                ComparisonOperator.GreaterThan => leftNumber > rightNumber,
+                ComparisonOperator.LessThan => leftNumber < rightNumber,
+                ComparisonOperator.GreaterThanOrEqual => leftNumber >= rightNumber,
+                ComparisonOperator.LessThanOrEqual => leftNumber <= rightNumber,
+                _ => throw new ArgumentOutOfRangeException(nameof(op), op, null)
+            };
+        }
+
+        var comparison = string.CompareOrdinal(leftValue, rightValue);
+        return op switch
+        {
+            ComparisonOperator.Equal => comparison == 0,
+            ComparisonOperator.NotEqual => comparison != 0,
+            ComparisonOperator.GreaterThan => comparison > 0,
+            ComparisonOperator.LessThan => comparison < 0,
+            ComparisonOperator.GreaterThanOrEqual => comparison >= 0,
+            ComparisonOperator.LessThanOrEqual => comparison <= 0,
+            _ => throw new ArgumentOutOfRangeException(nameof(op), op, null)
+        };
+    }
+
+    private static bool TryParseNumber(string value, out decimal number)
+    {
+        return decimal.TryParse(
+            value,
+            System.Globalization.NumberStyles.Number,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out number);
+    }
+
+    private static ComparisonFilter ParseComparisonExpression(string expression)
+    {
+        var trimmed = expression.Trim();
+        var operators = new[] { ">=", "<=", "!=", "=", ">", "<" };
+
+        foreach (var opText in operators)
+        {
+            var operatorIndex = trimmed.IndexOf(opText, StringComparison.Ordinal);
+            if (operatorIndex <= 0)
+            {
+                continue;
+            }
+
+            var columnName = trimmed[..operatorIndex].Trim();
+            var value = trimmed[(operatorIndex + opText.Length)..].Trim();
+            if (columnName.Length == 0 || value.Length == 0)
+            {
+                break;
+            }
+
+            return new ComparisonFilter(columnName, ParseOperator(opText), value);
+        }
+
+        throw new InvalidOperationException("Invalid comparison expression");
+    }
+
+    private static ComparisonOperator ParseOperator(string opText)
+    {
+        return opText switch
+        {
+            "=" => ComparisonOperator.Equal,
+            "!=" => ComparisonOperator.NotEqual,
+            ">" => ComparisonOperator.GreaterThan,
+            "<" => ComparisonOperator.LessThan,
+            ">=" => ComparisonOperator.GreaterThanOrEqual,
+            "<=" => ComparisonOperator.LessThanOrEqual,
+            _ => throw new InvalidOperationException("Invalid comparison operator")
+        };
     }
 
     private static List<string> ParseCsvLine(string line)
@@ -121,4 +272,16 @@ public static class CsvRoundTripper
         values.Add(current.ToString());
         return values;
     }
+
+    private enum ComparisonOperator
+    {
+        Equal,
+        NotEqual,
+        GreaterThan,
+        LessThan,
+        GreaterThanOrEqual,
+        LessThanOrEqual
+    }
+
+    private readonly record struct ComparisonFilter(string ColumnName, ComparisonOperator Operator, string Value);
 }
