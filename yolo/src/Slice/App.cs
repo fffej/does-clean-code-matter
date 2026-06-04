@@ -8,7 +8,7 @@ public static class App
 
         if (args.Length < 3 || args.Length > 4)
         {
-            error.WriteLine("Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc]");
+            error.WriteLine("Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc] | head <rows>");
             return 1;
         }
 
@@ -107,7 +107,27 @@ public static class App
             return 0;
         }
 
-        error.WriteLine("Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc]");
+        if (string.Equals(command, "head", StringComparison.Ordinal))
+        {
+            if (optionalArgument is not null)
+            {
+                error.WriteLine("Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc] | head <rows>");
+                return 1;
+            }
+
+            if (!int.TryParse(argument, out int rowCount) || rowCount <= 0)
+            {
+                error.WriteLine("Invalid row count.");
+                return 1;
+            }
+
+            int rowsToKeep = Math.Min(rowCount, document.Rows.Count);
+            IReadOnlyList<IReadOnlyList<string>> limitedRows = document.Rows.Take(rowsToKeep).ToArray();
+            CsvDocument.WriteDocument(document, limitedRows, output);
+            return 0;
+        }
+
+        error.WriteLine("Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc] | head <rows>");
         return 1;
     }
 
