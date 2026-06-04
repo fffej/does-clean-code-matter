@@ -5,24 +5,10 @@ static class Program
 {
     public static int Main()
     {
-        var tempFile = Path.Combine(Path.GetTempPath(), $"slice-roundtrip-{Guid.NewGuid():N}.csv");
-        var expected = "name,quote,notes\r\n" +
-                       "\"Ada\",\"Hello, world\",\"Line 1\r\nLine 2\"\r\n" +
-                       "\"Grace\",\"He said \"\"hi\"\"\",\"\r\nleading newline\"\r\n";
-
         try
         {
-            File.WriteAllText(tempFile, expected, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-
-            using var input = new StringReader(string.Empty);
-            using var output = new StringWriter();
-            using var error = new StringWriter();
-
-            var exitCode = App.Run([tempFile], input, output, error);
-
-            AssertEqual(0, exitCode, "exit code");
-            AssertEqual(expected, output.ToString(), "stdout");
-            AssertEqual(string.Empty, error.ToString(), "stderr");
+            RunSelectProjectionTest();
+            RunMissingColumnTest();
 
             return 0;
         }
@@ -30,6 +16,58 @@ static class Program
         {
             Console.Error.WriteLine(ex);
             return 1;
+        }
+    }
+
+    private static void RunSelectProjectionTest()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"slice-select-{Guid.NewGuid():N}.csv");
+        var inputCsv = "name,age,city\r\n" +
+                       "\"Ada\",31,\"London\"\r\n" +
+                       "\"Grace\",36,\"New York\"\r\n";
+        var expected = "age,name\r\n31,Ada\r\n36,Grace\r\n";
+
+        try
+        {
+            File.WriteAllText(tempFile, inputCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            using var input = new StringReader(string.Empty);
+            using var output = new StringWriter();
+            using var error = new StringWriter();
+
+            var exitCode = App.Run([tempFile, "select", "age,name"], input, output, error);
+
+            AssertEqual(0, exitCode, "exit code");
+            AssertEqual(expected, output.ToString(), "stdout");
+            AssertEqual(string.Empty, error.ToString(), "stderr");
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    private static void RunMissingColumnTest()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"slice-missing-column-{Guid.NewGuid():N}.csv");
+        var inputCsv = "name,age\r\nAda,31\r\n";
+
+        try
+        {
+            File.WriteAllText(tempFile, inputCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            using var input = new StringReader(string.Empty);
+            using var output = new StringWriter();
+            using var error = new StringWriter();
+
+            var exitCode = App.Run([tempFile, "select", "city"], input, output, error);
+
+            AssertEqual(1, exitCode, "missing column exit code");
+            AssertEqual(string.Empty, output.ToString(), "missing column stdout");
+            AssertEqual("Column not found: city" + Environment.NewLine, error.ToString(), "missing column stderr");
         }
         finally
         {
