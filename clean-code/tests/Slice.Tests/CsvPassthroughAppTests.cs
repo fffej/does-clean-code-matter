@@ -193,6 +193,144 @@ public sealed class CsvPassthroughAppTests
         }
     }
 
+    [TestMethod]
+    public void Run_CountOutputsNumberOfDataRows()
+    {
+        string csv = "name,age\r\nAlice,31\r\nBob,29\r\nCharlie,40\r\n";
+        string path = CreateTempFile(csv);
+
+        try
+        {
+            using var output = new MemoryStream();
+            using var error = new StringWriter();
+
+            int exitCode = CsvPassthroughApp.Run([path, "count"], output, error);
+
+            Assert.AreEqual(0, exitCode);
+            Assert.AreEqual(string.Empty, error.ToString());
+            Assert.AreEqual("3\r\n", ReadUtf8(output));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [TestMethod]
+    public void Run_CountReturnsZeroWhenThereAreNoDataRows()
+    {
+        string csv = "name,age\r\n";
+        string path = CreateTempFile(csv);
+
+        try
+        {
+            using var output = new MemoryStream();
+            using var error = new StringWriter();
+
+            int exitCode = CsvPassthroughApp.Run([path, "count"], output, error);
+
+            Assert.AreEqual(0, exitCode);
+            Assert.AreEqual(string.Empty, error.ToString());
+            Assert.AreEqual("0\r\n", ReadUtf8(output));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [TestMethod]
+    public void Run_SumOutputsTotalForNumericColumn()
+    {
+        string csv = "name,amount\r\nAlice,10.5\r\nBob,4.5\r\nCharlie,5\r\n";
+        string path = CreateTempFile(csv);
+
+        try
+        {
+            using var output = new MemoryStream();
+            using var error = new StringWriter();
+
+            int exitCode = CsvPassthroughApp.Run([path, "sum", "amount"], output, error);
+
+            Assert.AreEqual(0, exitCode);
+            Assert.AreEqual(string.Empty, error.ToString());
+            Assert.AreEqual("20\r\n", ReadUtf8(output));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [TestMethod]
+    public void Run_SumReturnsZeroWhenThereAreNoDataRows()
+    {
+        string csv = "name,amount\r\n";
+        string path = CreateTempFile(csv);
+
+        try
+        {
+            using var output = new MemoryStream();
+            using var error = new StringWriter();
+
+            int exitCode = CsvPassthroughApp.Run([path, "sum", "amount"], output, error);
+
+            Assert.AreEqual(0, exitCode);
+            Assert.AreEqual(string.Empty, error.ToString());
+            Assert.AreEqual("0\r\n", ReadUtf8(output));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [TestMethod]
+    public void Run_SumFailsWhenColumnIsMissing()
+    {
+        string csv = "name,age\r\nAlice,31\r\n";
+        string path = CreateTempFile(csv);
+
+        try
+        {
+            using var output = new MemoryStream();
+            using var error = new StringWriter();
+
+            int exitCode = CsvPassthroughApp.Run([path, "sum", "amount"], output, error);
+
+            Assert.AreEqual(1, exitCode);
+            StringAssert.Contains(error.ToString(), "Column not found: amount");
+            Assert.AreEqual(string.Empty, ReadUtf8(output));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [TestMethod]
+    public void Run_SumFailsWhenAnyIncludedValueIsNotNumeric()
+    {
+        string csv = "name,amount\r\nAlice,10\r\nBob,not-a-number\r\n";
+        string path = CreateTempFile(csv);
+
+        try
+        {
+            using var output = new MemoryStream();
+            using var error = new StringWriter();
+
+            int exitCode = CsvPassthroughApp.Run([path, "sum", "amount"], output, error);
+
+            Assert.AreEqual(1, exitCode);
+            StringAssert.Contains(error.ToString(), "Non-numeric value found in column amount: not-a-number");
+            Assert.AreEqual(string.Empty, ReadUtf8(output));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static string CreateTempFile(string content)
     {
         string path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.csv");

@@ -9,6 +9,11 @@ public static class CsvPassthroughApp
             return RunPassthrough(args[0], output, error);
         }
 
+        if (args.Length == 2 && string.Equals(args[1], "count", StringComparison.Ordinal))
+        {
+            return CsvAggregateApp.RunCount(args[0], output, error);
+        }
+
         if (args.Length == 3 && string.Equals(args[1], "select", StringComparison.Ordinal))
         {
             return CsvSelectApp.Run(args[0], args[2], output, error);
@@ -35,7 +40,14 @@ public static class CsvPassthroughApp
             return CsvSortApp.Run(args[0], args[2], sortDirection, output, error);
         }
 
+        if (args.Length == 3 && string.Equals(args[1], "sum", StringComparison.Ordinal))
+        {
+            return CsvAggregateApp.RunSum(args[0], args[2], output, error);
+        }
+
         error.WriteLine("Usage: slice <csv-file>");
+        error.WriteLine("Usage: slice <csv-file> count");
+        error.WriteLine("Usage: slice <csv-file> sum <column>");
         error.WriteLine("Usage: slice <csv-file> select <column1,column2,...>");
         error.WriteLine("Usage: slice <csv-file> where <column><operator><value>");
         error.WriteLine("Usage: slice <csv-file> head <n>");
