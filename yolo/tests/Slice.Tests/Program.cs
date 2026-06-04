@@ -12,6 +12,7 @@ static class Program
             RunTableFormatProjectionTest();
             RunMissingColumnTest();
             RunWhereNumericFilterTest();
+            RunWhereSortHeadPipelineTest();
             RunWhereTextInequalityTest();
             RunSortNumericDescendingTest();
             RunSortTextAscendingDefaultTest();
@@ -192,6 +193,48 @@ static class Program
             AssertEqual(0, exitCode, "where numeric exit code");
             AssertEqual(expected, output.ToString(), "where numeric stdout");
             AssertEqual(string.Empty, error.ToString(), "where numeric stderr");
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    private static void RunWhereSortHeadPipelineTest()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"slice-pipeline-{Guid.NewGuid():N}.csv");
+        var inputCsv = "name,age,city\r\n" +
+                       "\"Ada\",31,\"London\"\r\n" +
+                       "\"Grace\",36,\"New York\"\r\n" +
+                       "\"Linus\",20,\"Helsinki\"\r\n" +
+                       "\"Barbara\",41,\"Palo Alto\"\r\n" +
+                       "\"Edsger\",72,\"Amsterdam\"\r\n" +
+                       "\"Katherine\",29,\"Langley\"\r\n" +
+                       "\"Donald\",55,\"Zurich\"\r\n" +
+                       "\"Evelyn\",33,\"Seattle\"\r\n" +
+                       "\"Ken\",64,\"Boston\"\r\n" +
+                       "\"Margaret\",44,\"Chicago\"\r\n";
+        var expected = "name,age,city\r\n" +
+                       "Ada,31,London\r\n" +
+                       "Evelyn,33,Seattle\r\n" +
+                       "Grace,36,New York\r\n";
+
+        try
+        {
+            File.WriteAllText(tempFile, inputCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            using var input = new StringReader(string.Empty);
+            using var output = new StringWriter();
+            using var error = new StringWriter();
+
+            var exitCode = App.Run([tempFile, "where", "age>30", "|", "sort", "age", "|", "head", "3"], input, output, error);
+
+            AssertEqual(0, exitCode, "pipeline exit code");
+            AssertEqual(expected, output.ToString(), "pipeline stdout");
+            AssertEqual(string.Empty, error.ToString(), "pipeline stderr");
         }
         finally
         {

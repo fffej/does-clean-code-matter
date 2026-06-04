@@ -59,6 +59,12 @@ public static class App
 
         while (argumentIndex < commandArgs.Length)
         {
+            if (IsPipelineSeparator(commandArgs[argumentIndex]))
+            {
+                error.WriteLine(Usage);
+                return 1;
+            }
+
             string command = commandArgs[argumentIndex++];
 
             if (string.Equals(command, "select", StringComparison.Ordinal))
@@ -94,6 +100,12 @@ public static class App
                     projectedRows,
                     currentDocument.LineEnding,
                     currentDocument.EndsWithLineEnding);
+
+                if (!TryConsumePipelineSeparator(commandArgs, ref argumentIndex, error))
+                {
+                    return 1;
+                }
+
                 continue;
             }
 
@@ -134,6 +146,12 @@ public static class App
                     filteredRows,
                     currentDocument.LineEnding,
                     currentDocument.EndsWithLineEnding);
+
+                if (!TryConsumePipelineSeparator(commandArgs, ref argumentIndex, error))
+                {
+                    return 1;
+                }
+
                 continue;
             }
 
@@ -171,6 +189,12 @@ public static class App
                     sortedRows,
                     currentDocument.LineEnding,
                     currentDocument.EndsWithLineEnding);
+
+                if (!TryConsumePipelineSeparator(commandArgs, ref argumentIndex, error))
+                {
+                    return 1;
+                }
+
                 continue;
             }
 
@@ -196,6 +220,12 @@ public static class App
                     limitedRows,
                     currentDocument.LineEnding,
                     currentDocument.EndsWithLineEnding);
+
+                if (!TryConsumePipelineSeparator(commandArgs, ref argumentIndex, error))
+                {
+                    return 1;
+                }
+
                 continue;
             }
 
@@ -208,7 +238,9 @@ public static class App
                 }
 
                 int distinctArgumentStart = argumentIndex;
-                while (argumentIndex < commandArgs.Length && !IsCommandToken(commandArgs[argumentIndex]))
+                while (argumentIndex < commandArgs.Length &&
+                       !IsCommandToken(commandArgs[argumentIndex]) &&
+                       !IsPipelineSeparator(commandArgs[argumentIndex]))
                 {
                     argumentIndex++;
                 }
@@ -243,6 +275,17 @@ public static class App
                     distinctRows,
                     currentDocument.LineEnding,
                     currentDocument.EndsWithLineEnding);
+
+                if (argumentIndex < commandArgs.Length && IsPipelineSeparator(commandArgs[argumentIndex]))
+                {
+                    argumentIndex++;
+                    if (argumentIndex >= commandArgs.Length)
+                    {
+                        error.WriteLine(Usage);
+                        return 1;
+                    }
+                }
+
                 continue;
             }
 
@@ -277,6 +320,12 @@ public static class App
                     }
 
                     currentDocument = groupedDocument;
+
+                    if (!TryConsumePipelineSeparator(commandArgs, ref argumentIndex, error))
+                    {
+                        return 1;
+                    }
+
                     continue;
                 }
 
@@ -302,6 +351,12 @@ public static class App
                     }
 
                     currentDocument = groupedDocument;
+
+                    if (!TryConsumePipelineSeparator(commandArgs, ref argumentIndex, error))
+                    {
+                        return 1;
+                    }
+
                     continue;
                 }
 
@@ -815,6 +870,26 @@ public static class App
                string.Equals(value, "groupby", StringComparison.Ordinal) ||
                string.Equals(value, "count", StringComparison.Ordinal) ||
                string.Equals(value, "sum", StringComparison.Ordinal);
+    }
+
+    private static bool IsPipelineSeparator(string value)
+    {
+        return string.Equals(value, "|", StringComparison.Ordinal);
+    }
+
+    private static bool TryConsumePipelineSeparator(string[] commandArgs, ref int argumentIndex, TextWriter error)
+    {
+        if (argumentIndex < commandArgs.Length && IsPipelineSeparator(commandArgs[argumentIndex]))
+        {
+            argumentIndex++;
+            if (argumentIndex >= commandArgs.Length)
+            {
+                error.WriteLine(Usage);
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static decimal GetNumericSortValue(IReadOnlyList<string> row, int columnIndex)
