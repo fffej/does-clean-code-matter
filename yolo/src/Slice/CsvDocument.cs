@@ -202,6 +202,24 @@ internal sealed class CsvDocument
         }
     }
 
+    public static void WriteDocument(CsvDocument document, IReadOnlyList<IReadOnlyList<string>> rows, TextWriter output)
+    {
+        string separator = document.LineEnding;
+
+        WriteRow(output, document.Header);
+
+        for (int i = 0; i < rows.Count; i++)
+        {
+            output.Write(separator);
+            WriteRow(output, rows[i]);
+        }
+
+        if (document.EndsWithLineEnding)
+        {
+            output.Write(separator);
+        }
+    }
+
     private static void WriteRow(TextWriter output, IReadOnlyList<string> row, IReadOnlyList<int> selectedIndexes)
     {
         for (int i = 0; i < selectedIndexes.Count; i++)
@@ -214,6 +232,19 @@ internal sealed class CsvDocument
             int index = selectedIndexes[i];
             string value = index < row.Count ? row[index] : string.Empty;
             output.Write(Escape(value));
+        }
+    }
+
+    private static void WriteRow(TextWriter output, IReadOnlyList<string> row)
+    {
+        for (int i = 0; i < row.Count; i++)
+        {
+            if (i > 0)
+            {
+                output.Write(',');
+            }
+
+            output.Write(Escape(row[i]));
         }
     }
 
