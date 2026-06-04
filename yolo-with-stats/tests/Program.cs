@@ -6,6 +6,9 @@ var tests = new List<(string Name, Action Test)>
     ("selects named columns in requested order", SelectsNamedColumnsInRequestedOrder),
     ("returns failure when a selected column is missing", ReturnsFailureWhenSelectedColumnIsMissing),
     ("returns failure when arguments are invalid", ReturnsFailureWhenArgumentsAreInvalid),
+    ("renders tabular results as json", RendersTabularResultsAsJson),
+    ("renders tabular results as table", RendersTabularResultsAsTable),
+    ("renders scalar results as json", RendersScalarResultsAsJson),
     ("filters numeric rows with where", FiltersNumericRowsWithWhere),
     ("filters numeric rows with not-equal where", FiltersNumericRowsWithNotEqualWhere),
     ("filters text rows with where", FiltersTextRowsWithWhere),
@@ -107,6 +110,90 @@ static void ReturnsFailureWhenArgumentsAreInvalid()
     if (exitCode == 0)
     {
         throw new Exception("expected non-zero exit code");
+    }
+}
+
+static void RendersTabularResultsAsJson()
+{
+    var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
+    File.WriteAllText(tempPath, "name,age\r\nAda,36\r\nGrace,47\r\n");
+
+    try
+    {
+        using var output = new MemoryStream();
+        using var stderr = new StringWriter();
+        var exitCode = SliceApp.Run([tempPath, "--format", "json", "select", "name,age"], stderr, output);
+        if (exitCode != 0)
+        {
+            throw new Exception($"expected success, got exit code {exitCode}: {stderr}");
+        }
+
+        var result = Encoding.UTF8.GetString(output.ToArray());
+        var expected = "[{\"name\":\"Ada\",\"age\":\"36\"},{\"name\":\"Grace\",\"age\":\"47\"}]" + Environment.NewLine;
+        if (result != expected)
+        {
+            throw new Exception($"unexpected output: {result}");
+        }
+    }
+    finally
+    {
+        File.Delete(tempPath);
+    }
+}
+
+static void RendersTabularResultsAsTable()
+{
+    var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
+    File.WriteAllText(tempPath, "name,age\r\nAda,36\r\nGrace,47\r\n");
+
+    try
+    {
+        using var output = new MemoryStream();
+        using var stderr = new StringWriter();
+        var exitCode = SliceApp.Run([tempPath, "select", "name,age", "--format", "table"], stderr, output);
+        if (exitCode != 0)
+        {
+            throw new Exception($"expected success, got exit code {exitCode}: {stderr}");
+        }
+
+        var result = Encoding.UTF8.GetString(output.ToArray());
+        var expected = $"name  | age{Environment.NewLine}----- | ---{Environment.NewLine}Ada   | 36 {Environment.NewLine}Grace | 47 {Environment.NewLine}";
+        if (result != expected)
+        {
+            throw new Exception($"unexpected output: {result}");
+        }
+    }
+    finally
+    {
+        File.Delete(tempPath);
+    }
+}
+
+static void RendersScalarResultsAsJson()
+{
+    var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
+    File.WriteAllText(tempPath, "name,age\r\nAda,36\r\nGrace,47\r\n");
+
+    try
+    {
+        using var output = new MemoryStream();
+        using var stderr = new StringWriter();
+        var exitCode = SliceApp.Run([tempPath, "count", "--format", "json"], stderr, output);
+        if (exitCode != 0)
+        {
+            throw new Exception($"expected success, got exit code {exitCode}: {stderr}");
+        }
+
+        var result = Encoding.UTF8.GetString(output.ToArray());
+        var expected = $"2{Environment.NewLine}";
+        if (result != expected)
+        {
+            throw new Exception($"unexpected output: {result}");
+        }
+    }
+    finally
+    {
+        File.Delete(tempPath);
     }
 }
 

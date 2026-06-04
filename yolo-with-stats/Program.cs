@@ -1,3 +1,7 @@
+using System.Globalization;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+
 namespace Slice;
 
 internal static class Program
@@ -12,7 +16,7 @@ public static class SliceApp
 {
     public static int Run(string[] args, TextWriter stderr, Stream outputStream)
     {
-        if (!TryParseCommandSequence(args, out var path, out var commands))
+        if (!TryParseCommandSequence(args, out var path, out var commands, out var format))
         {
             WriteUsage(stderr);
             return 1;
@@ -20,14 +24,7 @@ public static class SliceApp
 
         try
         {
-            if (commands.Count == 1 && commands[0].Kind is PipelineCommandKind.Select or PipelineCommandKind.Where or PipelineCommandKind.Sort or PipelineCommandKind.Head or PipelineCommandKind.Distinct)
-            {
-                ExecuteSingleCommand(path, commands[0], outputStream);
-            }
-            else
-            {
-                ExecuteCommandSequence(path, commands, outputStream);
-            }
+            ExecuteCommandSequence(path, commands, format, outputStream);
 
             return 0;
         }
@@ -38,43 +35,66 @@ public static class SliceApp
         }
     }
 
-    private static bool TryParseCommandSequence(string[] args, out string path, out List<PipelineCommand> commands)
+    private static bool TryParseCommandSequence(string[] args, out string path, out List<PipelineCommand> commands, out OutputFormat format)
     {
         path = string.Empty;
         commands = new List<PipelineCommand>();
+        format = OutputFormat.Csv;
 
         if (args.Length < 2)
         {
             return false;
         }
 
-        path = args[0];
-        var index = 1;
-
-        while (index < args.Length)
+        var filteredArgs = new List<string>(args.Length);
+        for (var i = 0; i < args.Length; i++)
         {
-            var token = args[index];
-
-            if (IsCommand(token, "select"))
+            if (IsOption(args[i], "--format"))
             {
-                if (index + 1 >= args.Length)
+                if (i + 1 >= args.Length || !TryParseOutputFormat(args[i + 1], out format))
                 {
                     return false;
                 }
 
-                commands.Add(new PipelineCommand(PipelineCommandKind.Select, args[index + 1]));
+                i++;
+                continue;
+            }
+
+            filteredArgs.Add(args[i]);
+        }
+
+        if (filteredArgs.Count < 2)
+        {
+            return false;
+        }
+
+        path = filteredArgs[0];
+        var index = 1;
+
+        while (index < filteredArgs.Count)
+        {
+            var token = filteredArgs[index];
+
+            if (IsCommand(token, "select"))
+            {
+                if (index + 1 >= filteredArgs.Count)
+                {
+                    return false;
+                }
+
+                commands.Add(new PipelineCommand(PipelineCommandKind.Select, filteredArgs[index + 1]));
                 index += 2;
             }
             else if (IsCommand(token, "where"))
             {
-                if (index + 1 >= args.Length)
+                if (index + 1 >= filteredArgs.Count)
                 {
                     return false;
                 }
 
                 var expressionStart = index + 1;
                 index = expressionStart;
-                while (index < args.Length && !IsCommandKeyword(args[index]))
+                while (index < filteredArgs.Count && !IsCommandKeyword(filteredArgs[index]))
                 {
                     index++;
                 }
@@ -84,22 +104,22 @@ public static class SliceApp
                     return false;
                 }
 
-                commands.Add(new PipelineCommand(PipelineCommandKind.Where, string.Join(' ', args[expressionStart..index])));
+                commands.Add(new PipelineCommand(PipelineCommandKind.Where, string.Join(' ', filteredArgs.GetRange(expressionStart, index - expressionStart))));
             }
             else if (IsCommand(token, "sort"))
             {
-                if (index + 1 >= args.Length)
+                if (index + 1 >= filteredArgs.Count)
                 {
                     return false;
                 }
 
-                var columnName = args[index + 1];
+                var columnName = filteredArgs[index + 1];
                 var direction = "asc";
                 index += 2;
 
-                if (index < args.Length && !IsCommandKeyword(args[index]))
+                if (index < filteredArgs.Count && !IsCommandKeyword(filteredArgs[index]))
                 {
-                    direction = args[index];
+                    direction = filteredArgs[index];
                     index++;
                 }
 
@@ -107,24 +127,24 @@ public static class SliceApp
             }
             else if (IsCommand(token, "head"))
             {
-                if (index + 1 >= args.Length)
+                if (index + 1 >= filteredArgs.Count)
                 {
                     return false;
                 }
 
-                commands.Add(new PipelineCommand(PipelineCommandKind.Head, args[index + 1]));
+                commands.Add(new PipelineCommand(PipelineCommandKind.Head, filteredArgs[index + 1]));
                 index += 2;
             }
             else if (IsCommand(token, "distinct"))
             {
-                if (index + 1 >= args.Length)
+                if (index + 1 >= filteredArgs.Count)
                 {
                     return false;
                 }
 
                 var columnsStart = index + 1;
                 index = columnsStart;
-                while (index < args.Length && !IsCommandKeyword(args[index]))
+                while (index < filteredArgs.Count && !IsCommandKeyword(filteredArgs[index]))
                 {
                     index++;
                 }
@@ -134,52 +154,52 @@ public static class SliceApp
                     return false;
                 }
 
-                commands.Add(new PipelineCommand(PipelineCommandKind.Distinct, string.Join(' ', args[columnsStart..index])));
+                commands.Add(new PipelineCommand(PipelineCommandKind.Distinct, string.Join(' ', filteredArgs.GetRange(columnsStart, index - columnsStart))));
             }
             else if (IsCommand(token, "count"))
             {
                 commands.Add(new PipelineCommand(PipelineCommandKind.Count));
                 index++;
-                return index == args.Length;
+                return index == filteredArgs.Count;
             }
             else if (IsCommand(token, "sum"))
             {
-                if (index + 1 >= args.Length)
+                if (index + 1 >= filteredArgs.Count)
                 {
                     return false;
                 }
 
-                commands.Add(new PipelineCommand(PipelineCommandKind.Sum, args[index + 1]));
+                commands.Add(new PipelineCommand(PipelineCommandKind.Sum, filteredArgs[index + 1]));
                 index += 2;
-                return index == args.Length;
+                return index == filteredArgs.Count;
             }
             else if (IsCommand(token, "groupby"))
             {
-                if (index + 2 >= args.Length)
+                if (index + 2 >= filteredArgs.Count)
                 {
                     return false;
                 }
 
-                var groupColumnName = args[index + 1];
-                var aggregateName = args[index + 2];
+                var groupColumnName = filteredArgs[index + 1];
+                var aggregateName = filteredArgs[index + 2];
 
                 if (IsCommand(aggregateName, "count"))
                 {
                     commands.Add(new PipelineCommand(PipelineCommandKind.GroupByCount, groupColumnName));
                     index += 3;
-                    return index == args.Length;
+                    return index == filteredArgs.Count;
                 }
 
                 if (IsCommand(aggregateName, "sum"))
                 {
-                    if (index + 3 >= args.Length)
+                    if (index + 3 >= filteredArgs.Count)
                     {
                         return false;
                     }
 
-                    commands.Add(new PipelineCommand(PipelineCommandKind.GroupBySum, groupColumnName, args[index + 3]));
+                    commands.Add(new PipelineCommand(PipelineCommandKind.GroupBySum, groupColumnName, filteredArgs[index + 3]));
                     index += 4;
-                    return index == args.Length;
+                    return index == filteredArgs.Count;
                 }
 
                 return false;
@@ -193,45 +213,7 @@ public static class SliceApp
         return commands.Count > 0;
     }
 
-    private static void ExecuteSingleCommand(string path, PipelineCommand command, Stream outputStream)
-    {
-        switch (command.Kind)
-        {
-            case PipelineCommandKind.Select:
-            {
-                var selectedColumns = command.FirstArgument
-                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                CsvRoundTripper.WriteSelectedColumns(path, selectedColumns, outputStream);
-                break;
-            }
-            case PipelineCommandKind.Where:
-                CsvRoundTripper.WriteFilteredRows(path, command.FirstArgument, outputStream);
-                break;
-            case PipelineCommandKind.Sort:
-                CsvRoundTripper.WriteSortedRows(path, command.FirstArgument, command.SecondArgument ?? "asc", outputStream);
-                break;
-            case PipelineCommandKind.Head:
-                if (!int.TryParse(command.FirstArgument, out var rowCount))
-                {
-                    throw new InvalidOperationException("Row count must be a positive integer");
-                }
-
-                CsvRoundTripper.WriteHeadRows(path, rowCount, outputStream);
-                break;
-            case PipelineCommandKind.Distinct:
-            {
-                var distinctColumns = command.FirstArgument
-                    .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                CsvRoundTripper.WriteDistinctRows(path, distinctColumns, outputStream);
-                break;
-            }
-            default:
-                ExecuteCommandSequence(path, [command], outputStream);
-                break;
-        }
-    }
-
-    private static void ExecuteCommandSequence(string path, IReadOnlyList<PipelineCommand> commands, Stream outputStream)
+    private static void ExecuteCommandSequence(string path, IReadOnlyList<PipelineCommand> commands, OutputFormat format, Stream outputStream)
     {
         var table = ReadTable(path);
 
@@ -260,47 +242,26 @@ public static class SliceApp
                     table = DistinctRows(table, command.FirstArgument);
                     break;
                 case PipelineCommandKind.Count:
-                    WriteAggregateCount(table, outputStream);
+                    WriteScalar(table.Rows.Count, format, outputStream);
                     return;
                 case PipelineCommandKind.Sum:
-                    WriteAggregateSum(table, command.FirstArgument, outputStream);
+                    WriteScalar(CalculateSum(table, command.FirstArgument), format, outputStream);
                     return;
                 case PipelineCommandKind.GroupByCount:
-                    WriteGroupedCount(table, command.FirstArgument, outputStream);
-                    return;
+                    table = BuildGroupedCountTable(table, command.FirstArgument);
+                    break;
                 case PipelineCommandKind.GroupBySum:
-                    WriteGroupedSum(table, command.FirstArgument, command.SecondArgument ?? string.Empty, outputStream);
-                    return;
+                    table = BuildGroupedSumTable(table, command.FirstArgument, command.SecondArgument ?? string.Empty);
+                    break;
                 default:
                     throw new ArgumentOutOfRangeException();
             }
         }
 
-        WriteTable(table, outputStream);
+        WriteTable(table, format, outputStream);
     }
 
-    private static void WriteAggregateCount(string path, Stream outputStream)
-    {
-        WriteAggregateCount(ReadTable(path), outputStream);
-    }
-
-    private static void WriteAggregateCount(CsvTable table, Stream outputStream)
-    {
-        using var writer = new StreamWriter(outputStream, leaveOpen: true)
-        {
-            NewLine = Environment.NewLine
-        };
-
-        writer.WriteLine(table.Rows.Count);
-        writer.Flush();
-    }
-
-    private static void WriteAggregateSum(string path, string columnName, Stream outputStream)
-    {
-        WriteAggregateSum(ReadTable(path), columnName, outputStream);
-    }
-
-    private static void WriteAggregateSum(CsvTable table, string columnName, Stream outputStream)
+    private static decimal CalculateSum(CsvTable table, string columnName)
     {
         var headerIndexes = BuildHeaderIndex(table.Headers);
         if (!headerIndexes.TryGetValue(columnName, out var columnIndex))
@@ -312,7 +273,7 @@ public static class SliceApp
         foreach (var row in table.Rows)
         {
             var value = GetValue(row, columnIndex);
-            if (!decimal.TryParse(value, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var numericValue))
+            if (!decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var numericValue))
             {
                 throw new InvalidOperationException("All values in the target column must be numeric");
             }
@@ -320,16 +281,10 @@ public static class SliceApp
             total += numericValue;
         }
 
-        using var writer = new StreamWriter(outputStream, leaveOpen: true)
-        {
-            NewLine = Environment.NewLine
-        };
-
-        writer.WriteLine(total.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        writer.Flush();
+        return total;
     }
 
-    private static void WriteGroupedCount(CsvTable table, string groupColumnName, Stream outputStream)
+    private static CsvTable BuildGroupedCountTable(CsvTable table, string groupColumnName)
     {
         var headerIndexes = BuildHeaderIndex(table.Headers);
         if (!headerIndexes.TryGetValue(groupColumnName, out var groupColumnIndex))
@@ -352,21 +307,16 @@ public static class SliceApp
             groupCounts[groupValue]++;
         }
 
-        using var writer = new StreamWriter(outputStream, leaveOpen: true)
-        {
-            NewLine = Environment.NewLine
-        };
-
-        writer.WriteLine(string.Join(",", new[] { groupColumnName, "count" }));
+        var rows = new List<string[]>(groupOrder.Count);
         foreach (var groupValue in groupOrder)
         {
-            writer.WriteLine(string.Join(",", new[] { groupValue, groupCounts[groupValue].ToString(System.Globalization.CultureInfo.InvariantCulture) }));
+            rows.Add(new[] { groupValue, groupCounts[groupValue].ToString(CultureInfo.InvariantCulture) });
         }
 
-        writer.Flush();
+        return new CsvTable(new List<string> { groupColumnName, "count" }, rows);
     }
 
-    private static void WriteGroupedSum(CsvTable table, string groupColumnName, string valueColumnName, Stream outputStream)
+    private static CsvTable BuildGroupedSumTable(CsvTable table, string groupColumnName, string valueColumnName)
     {
         var headerIndexes = BuildHeaderIndex(table.Headers);
         if (!headerIndexes.TryGetValue(groupColumnName, out var groupColumnIndex))
@@ -386,7 +336,7 @@ public static class SliceApp
         {
             var groupValue = GetValue(row, groupColumnIndex);
             var value = GetValue(row, valueColumnIndex);
-            if (!decimal.TryParse(value, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var numericValue))
+            if (!decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var numericValue))
             {
                 throw new InvalidOperationException("All values in the target column must be numeric");
             }
@@ -400,18 +350,13 @@ public static class SliceApp
             groupTotals[groupValue] += numericValue;
         }
 
-        using var writer = new StreamWriter(outputStream, leaveOpen: true)
-        {
-            NewLine = Environment.NewLine
-        };
-
-        writer.WriteLine(string.Join(",", new[] { groupColumnName, "sum" }));
+        var rows = new List<string[]>(groupOrder.Count);
         foreach (var groupValue in groupOrder)
         {
-            writer.WriteLine(string.Join(",", new[] { groupValue, groupTotals[groupValue].ToString(System.Globalization.CultureInfo.InvariantCulture) }));
+            rows.Add(new[] { groupValue, groupTotals[groupValue].ToString(CultureInfo.InvariantCulture) });
         }
 
-        writer.Flush();
+        return new CsvTable(new List<string> { groupColumnName, "sum" }, rows);
     }
 
     private static CsvTable ReadTable(string path)
@@ -443,17 +388,90 @@ public static class SliceApp
         return new CsvTable(headers, rows);
     }
 
-    private static void WriteTable(CsvTable table, Stream outputStream)
+    private static void WriteTable(CsvTable table, OutputFormat format, Stream outputStream)
     {
         using var writer = new StreamWriter(outputStream, leaveOpen: true)
         {
             NewLine = Environment.NewLine
         };
 
-        writer.WriteLine(string.Join(",", table.Headers));
-        foreach (var row in table.Rows)
+        switch (format)
         {
-            writer.WriteLine(string.Join(",", row));
+            case OutputFormat.Csv:
+                writer.WriteLine(string.Join(",", table.Headers));
+                foreach (var row in table.Rows)
+                {
+                    writer.WriteLine(string.Join(",", row));
+                }
+
+                break;
+            case OutputFormat.Json:
+            {
+                var rows = new JsonArray();
+                foreach (var row in table.Rows)
+                {
+                    var obj = new JsonObject();
+                    for (var i = 0; i < table.Headers.Count; i++)
+                    {
+                        obj[table.Headers[i]] = GetValue(row, i);
+                    }
+
+                    rows.Add(obj);
+                }
+
+                writer.WriteLine(rows.ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
+                break;
+            }
+            case OutputFormat.Table:
+            {
+                var widths = new int[table.Headers.Count];
+                for (var i = 0; i < table.Headers.Count; i++)
+                {
+                    widths[i] = table.Headers[i].Length;
+                }
+
+                foreach (var row in table.Rows)
+                {
+                    for (var i = 0; i < table.Headers.Count; i++)
+                    {
+                        widths[i] = Math.Max(widths[i], GetValue(row, i).Length);
+                    }
+                }
+
+                writer.WriteLine(string.Join(" | ", table.Headers.Select((header, index) => header.PadRight(widths[index]))));
+                writer.WriteLine(string.Join(" | ", widths.Select(width => new string('-', width))));
+                foreach (var row in table.Rows)
+                {
+                    writer.WriteLine(string.Join(" | ", table.Headers.Select((_, index) => GetValue(row, index).PadRight(widths[index]))));
+                }
+
+                break;
+            }
+            default:
+                throw new ArgumentOutOfRangeException(nameof(format), format, null);
+        }
+
+        writer.Flush();
+    }
+
+    private static void WriteScalar(object value, OutputFormat format, Stream outputStream)
+    {
+        using var writer = new StreamWriter(outputStream, leaveOpen: true)
+        {
+            NewLine = Environment.NewLine
+        };
+
+        switch (format)
+        {
+            case OutputFormat.Json:
+                writer.WriteLine(JsonSerializer.Serialize(value));
+                break;
+            case OutputFormat.Csv:
+            case OutputFormat.Table:
+                writer.WriteLine(Convert.ToString(value, CultureInfo.InvariantCulture));
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(format), format, null);
         }
 
         writer.Flush();
@@ -614,6 +632,30 @@ public static class SliceApp
         return string.Equals(value, command, StringComparison.Ordinal);
     }
 
+    private static bool IsOption(string value, string option)
+    {
+        return string.Equals(value, option, StringComparison.Ordinal);
+    }
+
+    private static bool TryParseOutputFormat(string value, out OutputFormat format)
+    {
+        switch (value)
+        {
+            case "csv":
+                format = OutputFormat.Csv;
+                return true;
+            case "json":
+                format = OutputFormat.Json;
+                return true;
+            case "table":
+                format = OutputFormat.Table;
+                return true;
+            default:
+                format = OutputFormat.Csv;
+                return false;
+        }
+    }
+
     private static bool Matches(string leftValue, ComparisonOperator op, string rightValue)
     {
         if (TryParseNumber(leftValue, out var leftNumber) && TryParseNumber(rightValue, out var rightNumber))
@@ -752,15 +794,15 @@ public static class SliceApp
 
     private static void WriteUsage(TextWriter stderr)
     {
-        stderr.WriteLine("Usage: slice <csv-file> select <column1,column2,...>");
-        stderr.WriteLine("   or: slice <csv-file> where <column><operator><value>");
-        stderr.WriteLine("   or: slice <csv-file> sort <column> [asc|desc]");
-        stderr.WriteLine("   or: slice <csv-file> head <positive-integer>");
-        stderr.WriteLine("   or: slice <csv-file> distinct <column1> [column2 ...]");
-        stderr.WriteLine("   or: slice <csv-file> count");
-        stderr.WriteLine("   or: slice <csv-file> sum <column>");
-        stderr.WriteLine("   or: slice <csv-file> groupby <column> count");
-        stderr.WriteLine("   or: slice <csv-file> groupby <column> sum <column>");
+        stderr.WriteLine("Usage: slice <csv-file> [--format csv|json|table] select <column1,column2,...>");
+        stderr.WriteLine("   or: slice <csv-file> [--format csv|json|table] where <column><operator><value>");
+        stderr.WriteLine("   or: slice <csv-file> [--format csv|json|table] sort <column> [asc|desc]");
+        stderr.WriteLine("   or: slice <csv-file> [--format csv|json|table] head <positive-integer>");
+        stderr.WriteLine("   or: slice <csv-file> [--format csv|json|table] distinct <column1> [column2 ...]");
+        stderr.WriteLine("   or: slice <csv-file> [--format csv|json|table] count");
+        stderr.WriteLine("   or: slice <csv-file> [--format csv|json|table] sum <column>");
+        stderr.WriteLine("   or: slice <csv-file> [--format csv|json|table] groupby <column> count");
+        stderr.WriteLine("   or: slice <csv-file> [--format csv|json|table] groupby <column> sum <column>");
     }
 
     private sealed class CsvTable
@@ -844,6 +886,13 @@ public static class SliceApp
     }
 
     private readonly record struct SortableRow(string[] Values, string SortValue, decimal NumericSortValue, int OriginalIndex);
+
+    private enum OutputFormat
+    {
+        Csv,
+        Json,
+        Table
+    }
 
 }
 
