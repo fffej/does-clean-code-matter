@@ -70,9 +70,13 @@ public static class App
                     return 1;
                 }
 
+                IReadOnlyList<IReadOnlyList<string>> projectedRows = currentDocument.Rows
+                    .Select(row => ProjectRow(row, selectedIndexes))
+                    .ToArray();
+
                 currentDocument = new CsvDocument(
                     selectedIndexes.Select(index => currentDocument.Header[index]).ToArray(),
-                    currentDocument.Rows.Select(row => row.ToArray()).ToArray(),
+                    projectedRows,
                     currentDocument.LineEnding,
                     currentDocument.EndsWithLineEnding);
                 continue;
@@ -215,7 +219,7 @@ public static class App
                     string[] key = BuildDistinctKey(row, selectedIndexes);
                     if (seenKeys.Add(key))
                     {
-                        distinctRows.Add(row);
+                        distinctRows.Add(ProjectRow(row, selectedIndexes));
                     }
                 }
 
@@ -225,6 +229,69 @@ public static class App
                     currentDocument.LineEnding,
                     currentDocument.EndsWithLineEnding);
                 continue;
+            }
+
+            if (string.Equals(command, "groupby", StringComparison.Ordinal))
+            {
+                if (argumentIndex >= args.Length)
+                {
+                    error.WriteLine(Usage);
+                    return 1;
+                }
+
+                string groupColumnName = args[argumentIndex++];
+                if (argumentIndex >= args.Length)
+                {
+                    error.WriteLine(Usage);
+                    return 1;
+                }
+
+                string aggregateName = args[argumentIndex++];
+                if (string.Equals(aggregateName, "count", StringComparison.Ordinal))
+                {
+                    if (!TryGroupDocument(
+                            currentDocument,
+                            groupColumnName,
+                            GroupAggregateKind.Count,
+                            null,
+                            out CsvDocument groupedDocument,
+                            out string groupError))
+                    {
+                        error.WriteLine(groupError);
+                        return 1;
+                    }
+
+                    currentDocument = groupedDocument;
+                    continue;
+                }
+
+                if (string.Equals(aggregateName, "sum", StringComparison.Ordinal))
+                {
+                    if (argumentIndex >= args.Length)
+                    {
+                        error.WriteLine(Usage);
+                        return 1;
+                    }
+
+                    string aggregateColumnName = args[argumentIndex++];
+                    if (!TryGroupDocument(
+                            currentDocument,
+                            groupColumnName,
+                            GroupAggregateKind.Sum,
+                            aggregateColumnName,
+                            out CsvDocument groupedDocument,
+                            out string groupError))
+                    {
+                        error.WriteLine(groupError);
+                        return 1;
+                    }
+
+                    currentDocument = groupedDocument;
+                    continue;
+                }
+
+                error.WriteLine("Invalid group aggregate.");
+                return 1;
             }
 
             if (string.Equals(command, "count", StringComparison.Ordinal))
@@ -280,8 +347,8 @@ public static class App
             return 1;
         }
 
-        error.WriteLine(Usage);
-        return 1;
+        CsvDocument.WriteDocument(currentDocument, currentDocument.Rows, output);
+        return 0;
     }
 
     private static bool TryBuildSelection(
@@ -315,6 +382,18 @@ public static class App
 
         missingColumn = string.Empty;
         return true;
+    }
+
+    private static string[] ProjectRow(IReadOnlyList<string> row, IReadOnlyList<int> selectedIndexes)
+    {
+        var projectedRow = new string[selectedIndexes.Count];
+        for (int i = 0; i < selectedIndexes.Count; i++)
+        {
+            int index = selectedIndexes[i];
+            projectedRow[i] = index < row.Count ? row[index] : string.Empty;
+        }
+
+        return projectedRow;
     }
 
     private static IReadOnlyDictionary<string, int> BuildColumnLookup(IReadOnlyList<string> header)
@@ -380,6 +459,91 @@ public static class App
         return true;
     }
 
+    private static bool TryGroupDocument(
+        CsvDocument document,
+        string groupColumnName,
+        GroupAggregateKind aggregateKind,
+        string? aggregateColumnName,
+        out CsvDocument groupedDocument,
+        out string error)
+    {
+        IReadOnlyDictionary<string, int> columnLookup = BuildColumnLookup(document.Header);
+        if (!columnLookup.TryGetValue(groupColumnName, out int groupColumnIndex))
+        {
+            groupedDocument = null!;
+            error = $"Column not found: {groupColumnName}";
+            return false;
+        }
+
+        int aggregateColumnIndex = -1;
+        if (aggregateKind == GroupAggregateKind.Sum)
+        {
+            if (aggregateColumnName is null || !columnLookup.TryGetValue(aggregateColumnName, out aggregateColumnIndex))
+            {
+                groupedDocument = null!;
+                error = $"Column not found: {aggregateColumnName}";
+                return false;
+            }
+        }
+
+        var groups = new List<GroupState>();
+        var groupLookup = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        foreach (IReadOnlyList<string> row in document.Rows)
+        {
+            string groupValue = GetTextSortValue(row, groupColumnIndex);
+            if (!groupLookup.TryGetValue(groupValue, out int groupIndex))
+            {
+                groupIndex = groups.Count;
+                groupLookup[groupValue] = groupIndex;
+                groups.Add(new GroupState(groupValue));
+            }
+
+            GroupState group = groups[groupIndex];
+            group.Count++;
+
+            if (aggregateKind == GroupAggregateKind.Sum)
+            {
+                string value = GetTextSortValue(row, aggregateColumnIndex);
+                if (!decimal.TryParse(
+                        value,
+                        System.Globalization.NumberStyles.Number,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        out decimal numericValue))
+                {
+                    groupedDocument = null!;
+                    error = $"Column contains non-numeric values: {aggregateColumnName}";
+                    return false;
+                }
+
+                group.Sum += numericValue;
+            }
+        }
+
+        var groupedRows = new List<IReadOnlyList<string>>(groups.Count);
+        string aggregateHeader = aggregateKind == GroupAggregateKind.Count ? "count" : "sum";
+
+        foreach (GroupState group in groups)
+        {
+            groupedRows.Add(
+                new[]
+                {
+                    group.Key,
+                    aggregateKind == GroupAggregateKind.Count
+                        ? group.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                        : group.Sum.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                });
+        }
+
+        groupedDocument = new CsvDocument(
+            new[] { groupColumnName, aggregateHeader },
+            groupedRows,
+            document.LineEnding,
+            document.EndsWithLineEnding);
+        error = string.Empty;
+        return true;
+    }
+
     private static string[] BuildDistinctKey(IReadOnlyList<string> row, IReadOnlyList<int> selectedIndexes)
     {
         var key = new string[selectedIndexes.Count];
@@ -433,6 +597,7 @@ public static class App
                string.Equals(value, "sort", StringComparison.Ordinal) ||
                string.Equals(value, "head", StringComparison.Ordinal) ||
                string.Equals(value, "distinct", StringComparison.Ordinal) ||
+               string.Equals(value, "groupby", StringComparison.Ordinal) ||
                string.Equals(value, "count", StringComparison.Ordinal) ||
                string.Equals(value, "sum", StringComparison.Ordinal);
     }
@@ -585,5 +750,25 @@ public static class App
 
             return hashCode.ToHashCode();
         }
+    }
+
+    private enum GroupAggregateKind
+    {
+        Count,
+        Sum,
+    }
+
+    private sealed class GroupState
+    {
+        public GroupState(string key)
+        {
+            Key = key;
+        }
+
+        public string Key { get; }
+
+        public int Count { get; set; }
+
+        public decimal Sum { get; set; }
     }
 }

@@ -25,6 +25,10 @@ static class Program
             RunSumAmountColumnTest();
             RunSumMissingColumnTest();
             RunSumNonNumericColumnTest();
+            RunGroupByCountFirstSeenOrderTest();
+            RunGroupBySumAmountColumnTest();
+            RunGroupByMissingColumnTest();
+            RunGroupByNonNumericSumColumnTest();
 
             return 0;
         }
@@ -626,6 +630,139 @@ static class Program
             AssertEqual(1, exitCode, "sum non-numeric exit code");
             AssertEqual(string.Empty, output.ToString(), "sum non-numeric stdout");
             AssertEqual("Column contains non-numeric values: amount" + Environment.NewLine, error.ToString(), "sum non-numeric stderr");
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    private static void RunGroupByCountFirstSeenOrderTest()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"slice-groupby-count-{Guid.NewGuid():N}.csv");
+        var inputCsv = "city,amount\r\n" +
+                       "\"London\",10\r\n" +
+                       "\"New York\",20\r\n" +
+                       "\"London\",30\r\n" +
+                       "\"Paris\",40\r\n" +
+                       "\"New York\",50\r\n";
+        var expected = "city,count\r\n" +
+                       "London,2\r\n" +
+                       "New York,2\r\n" +
+                       "Paris,1\r\n";
+
+        try
+        {
+            File.WriteAllText(tempFile, inputCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            using var input = new StringReader(string.Empty);
+            using var output = new StringWriter();
+            using var error = new StringWriter();
+
+            var exitCode = App.Run([tempFile, "groupby", "city", "count"], input, output, error);
+
+            AssertEqual(0, exitCode, "groupby count exit code");
+            AssertEqual(expected, output.ToString(), "groupby count stdout");
+            AssertEqual(string.Empty, error.ToString(), "groupby count stderr");
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    private static void RunGroupBySumAmountColumnTest()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"slice-groupby-sum-{Guid.NewGuid():N}.csv");
+        var inputCsv = "city,amount\r\n" +
+                       "\"London\",10\r\n" +
+                       "\"New York\",20.5\r\n" +
+                       "\"London\",30\r\n" +
+                       "\"Paris\",40\r\n" +
+                       "\"New York\",50\r\n";
+        var expected = "city,sum\r\n" +
+                       "London,40\r\n" +
+                       "New York,70.5\r\n" +
+                       "Paris,40\r\n";
+
+        try
+        {
+            File.WriteAllText(tempFile, inputCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            using var input = new StringReader(string.Empty);
+            using var output = new StringWriter();
+            using var error = new StringWriter();
+
+            var exitCode = App.Run([tempFile, "groupby", "city", "sum", "amount"], input, output, error);
+
+            AssertEqual(0, exitCode, "groupby sum exit code");
+            AssertEqual(expected, output.ToString(), "groupby sum stdout");
+            AssertEqual(string.Empty, error.ToString(), "groupby sum stderr");
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    private static void RunGroupByMissingColumnTest()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"slice-groupby-missing-{Guid.NewGuid():N}.csv");
+        var inputCsv = "city,amount\r\n\"London\",10\r\n";
+
+        try
+        {
+            File.WriteAllText(tempFile, inputCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            using var input = new StringReader(string.Empty);
+            using var output = new StringWriter();
+            using var error = new StringWriter();
+
+            var exitCode = App.Run([tempFile, "groupby", "country", "count"], input, output, error);
+
+            AssertEqual(1, exitCode, "groupby missing exit code");
+            AssertEqual(string.Empty, output.ToString(), "groupby missing stdout");
+            AssertEqual("Column not found: country" + Environment.NewLine, error.ToString(), "groupby missing stderr");
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    private static void RunGroupByNonNumericSumColumnTest()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"slice-groupby-nonnumeric-{Guid.NewGuid():N}.csv");
+        var inputCsv = "city,amount\r\n" +
+                       "\"London\",10\r\n" +
+                       "\"New York\",oops\r\n" +
+                       "\"London\",30\r\n";
+
+        try
+        {
+            File.WriteAllText(tempFile, inputCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            using var input = new StringReader(string.Empty);
+            using var output = new StringWriter();
+            using var error = new StringWriter();
+
+            var exitCode = App.Run([tempFile, "groupby", "city", "sum", "amount"], input, output, error);
+
+            AssertEqual(1, exitCode, "groupby non-numeric exit code");
+            AssertEqual(string.Empty, output.ToString(), "groupby non-numeric stdout");
+            AssertEqual("Column contains non-numeric values: amount" + Environment.NewLine, error.ToString(), "groupby non-numeric stderr");
         }
         finally
         {
