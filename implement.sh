@@ -129,11 +129,12 @@ Implement this feature completely. Leave the workspace containing the finished p
 EOF
 )
 
-  if ! codex exec \
+  if ! codex \
     --model "$MODEL" \
+    --ask-for-approval never \
+    exec \
     --cd "$tmp_project" \
     --sandbox workspace-write \
-    --ask-for-approval never \
     --skip-git-repo-check \
     --ephemeral \
     - <<<"$codex_prompt"; then
