@@ -4,7 +4,7 @@ namespace Slice;
 
 internal sealed class CsvDocument
 {
-    private CsvDocument(
+    internal CsvDocument(
         IReadOnlyList<string> header,
         IReadOnlyList<IReadOnlyList<string>> rows,
         string lineEnding,

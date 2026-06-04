@@ -3,20 +3,19 @@ namespace Slice;
 public static class App
 {
     private const string Usage =
-        "Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc] | head <rows> | distinct <columns...>";
+        "Usage: slice <csv-file> <command> [args...]";
 
     public static int Run(string[] args, TextReader input, TextWriter output, TextWriter error)
     {
         _ = input;
 
-        if (args.Length < 3)
+        if (args.Length < 2)
         {
             error.WriteLine(Usage);
             return 1;
         }
 
         string path = args[0];
-        string command = args[1];
 
         if (!File.Exists(path))
         {
@@ -40,146 +39,245 @@ public static class App
             return 1;
         }
 
-        if (string.Equals(command, "select", StringComparison.Ordinal))
+        CsvDocument currentDocument = document;
+        int argumentIndex = 1;
+
+        while (argumentIndex < args.Length)
         {
-            if (args.Length != 3)
+            string command = args[argumentIndex++];
+
+            if (string.Equals(command, "select", StringComparison.Ordinal))
             {
-                error.WriteLine(Usage);
-                return 1;
-            }
-
-            string argument = args[2];
-            string[] requestedColumns = argument
-                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-
-            if (requestedColumns.Length == 0)
-            {
-                error.WriteLine("No columns selected.");
-                return 1;
-            }
-
-            if (!TryBuildSelection(document.Header, requestedColumns, out int[] selectedIndexes, out string missingColumn))
-            {
-                error.WriteLine($"Column not found: {missingColumn}");
-                return 1;
-            }
-
-            CsvDocument.WriteSelection(document, selectedIndexes, document.Rows, output);
-            return 0;
-        }
-
-        if (string.Equals(command, "where", StringComparison.Ordinal))
-        {
-            if (args.Length != 3)
-            {
-                error.WriteLine(Usage);
-                return 1;
-            }
-
-            string argument = args[2];
-            if (!TryParseWhereExpression(argument, out string columnName, out ComparisonOperator comparisonOperator, out string literalValue, out string whereError))
-            {
-                error.WriteLine(whereError);
-                return 1;
-            }
-
-            IReadOnlyDictionary<string, int> columnLookup = BuildColumnLookup(document.Header);
-            if (!columnLookup.TryGetValue(columnName, out int columnIndex))
-            {
-                error.WriteLine($"Column not found: {columnName}");
-                return 1;
-            }
-
-            var filteredRows = new List<IReadOnlyList<string>>();
-            foreach (IReadOnlyList<string> row in document.Rows)
-            {
-                string leftValue = columnIndex < row.Count ? row[columnIndex] : string.Empty;
-                if (MatchesComparison(leftValue, literalValue, comparisonOperator))
+                if (argumentIndex >= args.Length)
                 {
-                    filteredRows.Add(row);
+                    error.WriteLine(Usage);
+                    return 1;
                 }
-            }
 
-            CsvDocument.WriteDocument(document, filteredRows, output);
-            return 0;
-        }
+                string argument = args[argumentIndex++];
+                string[] requestedColumns = argument
+                    .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
-        if (string.Equals(command, "sort", StringComparison.Ordinal))
-        {
-            if (args.Length < 3 || args.Length > 4)
-            {
-                error.WriteLine(Usage);
-                return 1;
-            }
-
-            string argument = args[2];
-            string? optionalArgument = args.Length == 4 ? args[3] : null;
-            if (!TryParseSortDirection(optionalArgument, out bool descending, out string sortError))
-            {
-                error.WriteLine(sortError);
-                return 1;
-            }
-
-            if (!TrySortDocument(document, argument, descending, out IReadOnlyList<IReadOnlyList<string>> sortedRows, out string sortColumnError))
-            {
-                error.WriteLine(sortColumnError);
-                return 1;
-            }
-
-            CsvDocument.WriteDocument(document, sortedRows, output);
-            return 0;
-        }
-
-        if (string.Equals(command, "head", StringComparison.Ordinal))
-        {
-            if (args.Length != 3)
-            {
-                error.WriteLine(Usage);
-                return 1;
-            }
-
-            string argument = args[2];
-            if (!int.TryParse(argument, out int rowCount) || rowCount <= 0)
-            {
-                error.WriteLine("Invalid row count.");
-                return 1;
-            }
-
-            int rowsToKeep = Math.Min(rowCount, document.Rows.Count);
-            IReadOnlyList<IReadOnlyList<string>> limitedRows = document.Rows.Take(rowsToKeep).ToArray();
-            CsvDocument.WriteDocument(document, limitedRows, output);
-            return 0;
-        }
-
-        if (string.Equals(command, "distinct", StringComparison.Ordinal))
-        {
-            if (args.Length < 3)
-            {
-                error.WriteLine(Usage);
-                return 1;
-            }
-
-            string[] requestedColumns = args[2..];
-            if (!TryBuildSelection(document.Header, requestedColumns, out int[] selectedIndexes, out string missingColumn))
-            {
-                error.WriteLine($"Column not found: {missingColumn}");
-                return 1;
-            }
-
-            var distinctRows = new List<IReadOnlyList<string>>();
-            var seenKeys = new HashSet<string[]>(new StringArrayComparer());
-
-            foreach (IReadOnlyList<string> row in document.Rows)
-            {
-                string[] key = BuildDistinctKey(row, selectedIndexes);
-                if (seenKeys.Add(key))
+                if (requestedColumns.Length == 0)
                 {
-                    distinctRows.Add(row);
+                    error.WriteLine("No columns selected.");
+                    return 1;
                 }
+
+                if (!TryBuildSelection(currentDocument.Header, requestedColumns, out int[] selectedIndexes, out string missingColumn))
+                {
+                    error.WriteLine($"Column not found: {missingColumn}");
+                    return 1;
+                }
+
+                currentDocument = new CsvDocument(
+                    selectedIndexes.Select(index => currentDocument.Header[index]).ToArray(),
+                    currentDocument.Rows.Select(row => row.ToArray()).ToArray(),
+                    currentDocument.LineEnding,
+                    currentDocument.EndsWithLineEnding);
+                continue;
             }
 
-            CsvDocument.WriteSelection(document, selectedIndexes, distinctRows, output);
-            return 0;
+            if (string.Equals(command, "where", StringComparison.Ordinal))
+            {
+                if (argumentIndex >= args.Length)
+                {
+                    error.WriteLine(Usage);
+                    return 1;
+                }
+
+                string argument = args[argumentIndex++];
+                if (!TryParseWhereExpression(argument, out string columnName, out ComparisonOperator comparisonOperator, out string literalValue, out string whereError))
+                {
+                    error.WriteLine(whereError);
+                    return 1;
+                }
+
+                IReadOnlyDictionary<string, int> columnLookup = BuildColumnLookup(currentDocument.Header);
+                if (!columnLookup.TryGetValue(columnName, out int columnIndex))
+                {
+                    error.WriteLine($"Column not found: {columnName}");
+                    return 1;
+                }
+
+                var filteredRows = new List<IReadOnlyList<string>>();
+                foreach (IReadOnlyList<string> row in currentDocument.Rows)
+                {
+                    string leftValue = columnIndex < row.Count ? row[columnIndex] : string.Empty;
+                    if (MatchesComparison(leftValue, literalValue, comparisonOperator))
+                    {
+                        filteredRows.Add(row);
+                    }
+                }
+
+                currentDocument = new CsvDocument(
+                    currentDocument.Header.ToArray(),
+                    filteredRows,
+                    currentDocument.LineEnding,
+                    currentDocument.EndsWithLineEnding);
+                continue;
+            }
+
+            if (string.Equals(command, "sort", StringComparison.Ordinal))
+            {
+                if (argumentIndex >= args.Length)
+                {
+                    error.WriteLine(Usage);
+                    return 1;
+                }
+
+                string argument = args[argumentIndex++];
+                string? optionalArgument = argumentIndex < args.Length && IsSortDirection(args[argumentIndex])
+                    ? args[argumentIndex]
+                    : null;
+                if (!TryParseSortDirection(optionalArgument, out bool descending, out string sortError))
+                {
+                    error.WriteLine(sortError);
+                    return 1;
+                }
+
+                if (optionalArgument is not null)
+                {
+                    argumentIndex++;
+                }
+
+                if (!TrySortDocument(currentDocument, argument, descending, out IReadOnlyList<IReadOnlyList<string>> sortedRows, out string sortColumnError))
+                {
+                    error.WriteLine(sortColumnError);
+                    return 1;
+                }
+
+                currentDocument = new CsvDocument(
+                    currentDocument.Header.ToArray(),
+                    sortedRows,
+                    currentDocument.LineEnding,
+                    currentDocument.EndsWithLineEnding);
+                continue;
+            }
+
+            if (string.Equals(command, "head", StringComparison.Ordinal))
+            {
+                if (argumentIndex >= args.Length)
+                {
+                    error.WriteLine(Usage);
+                    return 1;
+                }
+
+                string argument = args[argumentIndex++];
+                if (!int.TryParse(argument, out int rowCount) || rowCount <= 0)
+                {
+                    error.WriteLine("Invalid row count.");
+                    return 1;
+                }
+
+                int rowsToKeep = Math.Min(rowCount, currentDocument.Rows.Count);
+                IReadOnlyList<IReadOnlyList<string>> limitedRows = currentDocument.Rows.Take(rowsToKeep).ToArray();
+                currentDocument = new CsvDocument(
+                    currentDocument.Header.ToArray(),
+                    limitedRows,
+                    currentDocument.LineEnding,
+                    currentDocument.EndsWithLineEnding);
+                continue;
+            }
+
+            if (string.Equals(command, "distinct", StringComparison.Ordinal))
+            {
+                if (argumentIndex >= args.Length)
+                {
+                    error.WriteLine(Usage);
+                    return 1;
+                }
+
+                int distinctArgumentStart = argumentIndex;
+                while (argumentIndex < args.Length && !IsCommandToken(args[argumentIndex]))
+                {
+                    argumentIndex++;
+                }
+
+                string[] requestedColumns = args[distinctArgumentStart..argumentIndex];
+                if (requestedColumns.Length == 0)
+                {
+                    error.WriteLine("No columns selected.");
+                    return 1;
+                }
+
+                if (!TryBuildSelection(currentDocument.Header, requestedColumns, out int[] selectedIndexes, out string missingColumn))
+                {
+                    error.WriteLine($"Column not found: {missingColumn}");
+                    return 1;
+                }
+
+                var distinctRows = new List<IReadOnlyList<string>>();
+                var seenKeys = new HashSet<string[]>(new StringArrayComparer());
+
+                foreach (IReadOnlyList<string> row in currentDocument.Rows)
+                {
+                    string[] key = BuildDistinctKey(row, selectedIndexes);
+                    if (seenKeys.Add(key))
+                    {
+                        distinctRows.Add(row);
+                    }
+                }
+
+                currentDocument = new CsvDocument(
+                    selectedIndexes.Select(index => currentDocument.Header[index]).ToArray(),
+                    distinctRows,
+                    currentDocument.LineEnding,
+                    currentDocument.EndsWithLineEnding);
+                continue;
+            }
+
+            if (string.Equals(command, "count", StringComparison.Ordinal))
+            {
+                if (argumentIndex != args.Length)
+                {
+                    error.WriteLine(Usage);
+                    return 1;
+                }
+
+                WriteScalarResult(output, currentDocument.Rows.Count.ToString(System.Globalization.CultureInfo.InvariantCulture), currentDocument.LineEnding);
+                return 0;
+            }
+
+            if (string.Equals(command, "sum", StringComparison.Ordinal))
+            {
+                if (argumentIndex >= args.Length || argumentIndex != args.Length - 1)
+                {
+                    error.WriteLine(Usage);
+                    return 1;
+                }
+
+                string columnName = args[argumentIndex++];
+                IReadOnlyDictionary<string, int> columnLookup = BuildColumnLookup(currentDocument.Header);
+                if (!columnLookup.TryGetValue(columnName, out int columnIndex))
+                {
+                    error.WriteLine($"Column not found: {columnName}");
+                    return 1;
+                }
+
+                decimal total = 0;
+                foreach (IReadOnlyList<string> row in currentDocument.Rows)
+                {
+                    string value = columnIndex < row.Count ? row[columnIndex] : string.Empty;
+                    if (!decimal.TryParse(
+                            value,
+                            System.Globalization.NumberStyles.Number,
+                            System.Globalization.CultureInfo.InvariantCulture,
+                            out decimal numericValue))
+                    {
+                        error.WriteLine($"Column contains non-numeric values: {columnName}");
+                        return 1;
+                    }
+
+                    total += numericValue;
+                }
+
+                WriteScalarResult(output, total.ToString(System.Globalization.CultureInfo.InvariantCulture), currentDocument.LineEnding);
+                return 0;
+            }
+
+            error.WriteLine(Usage);
+            return 1;
         }
 
         error.WriteLine(Usage);
@@ -322,6 +420,23 @@ public static class App
         return false;
     }
 
+    private static bool IsSortDirection(string value)
+    {
+        return string.Equals(value, "asc", StringComparison.Ordinal) ||
+               string.Equals(value, "desc", StringComparison.Ordinal);
+    }
+
+    private static bool IsCommandToken(string value)
+    {
+        return string.Equals(value, "select", StringComparison.Ordinal) ||
+               string.Equals(value, "where", StringComparison.Ordinal) ||
+               string.Equals(value, "sort", StringComparison.Ordinal) ||
+               string.Equals(value, "head", StringComparison.Ordinal) ||
+               string.Equals(value, "distinct", StringComparison.Ordinal) ||
+               string.Equals(value, "count", StringComparison.Ordinal) ||
+               string.Equals(value, "sum", StringComparison.Ordinal);
+    }
+
     private static decimal GetNumericSortValue(IReadOnlyList<string> row, int columnIndex)
     {
         string value = GetTextSortValue(row, columnIndex);
@@ -386,6 +501,12 @@ public static class App
         literalValue = string.Empty;
         error = "Invalid where expression.";
         return false;
+    }
+
+    private static void WriteScalarResult(TextWriter output, string value, string lineEnding)
+    {
+        output.Write(value);
+        output.Write(lineEnding);
     }
 
     private static bool MatchesComparison(string leftValue, string rightValue, ComparisonOperator comparisonOperator)

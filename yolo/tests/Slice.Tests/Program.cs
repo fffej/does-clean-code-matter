@@ -20,6 +20,11 @@ static class Program
             RunDistinctSingleColumnFirstSeenOrderTest();
             RunDistinctMultipleColumnsCompositeKeyTest();
             RunDistinctMissingColumnTest();
+            RunCountAllRowsTest();
+            RunCountAfterFilterAndLimitTest();
+            RunSumAmountColumnTest();
+            RunSumMissingColumnTest();
+            RunSumNonNumericColumnTest();
 
             return 0;
         }
@@ -457,6 +462,170 @@ static class Program
             AssertEqual(1, exitCode, "distinct missing exit code");
             AssertEqual(string.Empty, output.ToString(), "distinct missing stdout");
             AssertEqual("Column not found: country" + Environment.NewLine, error.ToString(), "distinct missing stderr");
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    private static void RunCountAllRowsTest()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"slice-count-{Guid.NewGuid():N}.csv");
+        var inputCsv = "name,amount\r\n" +
+                       "Ada,10\r\n" +
+                       "Grace,20\r\n" +
+                       "Linus,30\r\n" +
+                       "Barbara,40\r\n" +
+                       "Edsger,50\r\n" +
+                       "Katherine,60\r\n" +
+                       "Donald,70\r\n" +
+                       "Evelyn,80\r\n" +
+                       "Ken,90\r\n" +
+                       "Margaret,100\r\n";
+        var expected = "10\r\n";
+
+        try
+        {
+            File.WriteAllText(tempFile, inputCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            using var input = new StringReader(string.Empty);
+            using var output = new StringWriter();
+            using var error = new StringWriter();
+
+            var exitCode = App.Run([tempFile, "count"], input, output, error);
+
+            AssertEqual(0, exitCode, "count exit code");
+            AssertEqual(expected, output.ToString(), "count stdout");
+            AssertEqual(string.Empty, error.ToString(), "count stderr");
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    private static void RunCountAfterFilterAndLimitTest()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"slice-count-chain-{Guid.NewGuid():N}.csv");
+        var inputCsv = "name,amount\r\n" +
+                       "Ada,10\r\n" +
+                       "Grace,20\r\n" +
+                       "Linus,30\r\n" +
+                       "Barbara,40\r\n" +
+                       "Edsger,50\r\n";
+        var expected = "2\r\n";
+
+        try
+        {
+            File.WriteAllText(tempFile, inputCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            using var input = new StringReader(string.Empty);
+            using var output = new StringWriter();
+            using var error = new StringWriter();
+
+            var exitCode = App.Run([tempFile, "where", "amount>20", "head", "2", "count"], input, output, error);
+
+            AssertEqual(0, exitCode, "count chain exit code");
+            AssertEqual(expected, output.ToString(), "count chain stdout");
+            AssertEqual(string.Empty, error.ToString(), "count chain stderr");
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    private static void RunSumAmountColumnTest()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"slice-sum-{Guid.NewGuid():N}.csv");
+        var inputCsv = "name,amount\r\n" +
+                       "Ada,10\r\n" +
+                       "Grace,20\r\n" +
+                       "Linus,30\r\n";
+        var expected = "60\r\n";
+
+        try
+        {
+            File.WriteAllText(tempFile, inputCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            using var input = new StringReader(string.Empty);
+            using var output = new StringWriter();
+            using var error = new StringWriter();
+
+            var exitCode = App.Run([tempFile, "sum", "amount"], input, output, error);
+
+            AssertEqual(0, exitCode, "sum exit code");
+            AssertEqual(expected, output.ToString(), "sum stdout");
+            AssertEqual(string.Empty, error.ToString(), "sum stderr");
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    private static void RunSumMissingColumnTest()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"slice-sum-missing-{Guid.NewGuid():N}.csv");
+        var inputCsv = "name,amount\r\nAda,10\r\n";
+
+        try
+        {
+            File.WriteAllText(tempFile, inputCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            using var input = new StringReader(string.Empty);
+            using var output = new StringWriter();
+            using var error = new StringWriter();
+
+            var exitCode = App.Run([tempFile, "sum", "missing"], input, output, error);
+
+            AssertEqual(1, exitCode, "sum missing exit code");
+            AssertEqual(string.Empty, output.ToString(), "sum missing stdout");
+            AssertEqual("Column not found: missing" + Environment.NewLine, error.ToString(), "sum missing stderr");
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    private static void RunSumNonNumericColumnTest()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"slice-sum-nonnumeric-{Guid.NewGuid():N}.csv");
+        var inputCsv = "name,amount\r\n" +
+                       "Ada,10\r\n" +
+                       "Grace,NaN\r\n" +
+                       "Linus,30\r\n";
+
+        try
+        {
+            File.WriteAllText(tempFile, inputCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            using var input = new StringReader(string.Empty);
+            using var output = new StringWriter();
+            using var error = new StringWriter();
+
+            var exitCode = App.Run([tempFile, "sum", "amount"], input, output, error);
+
+            AssertEqual(1, exitCode, "sum non-numeric exit code");
+            AssertEqual(string.Empty, output.ToString(), "sum non-numeric stdout");
+            AssertEqual("Column contains non-numeric values: amount" + Environment.NewLine, error.ToString(), "sum non-numeric stderr");
         }
         finally
         {
