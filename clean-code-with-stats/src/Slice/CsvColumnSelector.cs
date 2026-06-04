@@ -29,14 +29,13 @@ internal sealed class CsvTableProcessor
         return requestedColumns;
     }
 
-    public async Task<string?> WriteSelectedColumnsAsync(
+    public ExecutionOutcome SelectColumns(
         Stream input,
-        Stream output,
         IReadOnlyList<string> requestedColumns)
     {
         if (requestedColumns.Count == 0)
         {
-            return "No columns were selected.";
+            return ExecutionOutcome.Failure("No columns were selected.");
         }
 
         using var parser = new TextFieldParser(input, Encoding.UTF8)
@@ -51,20 +50,16 @@ internal sealed class CsvTableProcessor
         var headers = parser.ReadFields();
         if (headers is null)
         {
-            return "CSV file is empty.";
+            return ExecutionOutcome.Failure("CSV file is empty.");
         }
 
         if (!TryResolveRequestedColumnIndexes(headers, requestedColumns, out var selectedIndexes, out var errorMessage))
         {
-            return errorMessage;
+            return ExecutionOutcome.Failure(errorMessage!);
         }
 
-        await using var writer = new StreamWriter(output, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), leaveOpen: true)
-        {
-            NewLine = "\r\n"
-        };
-
-        await writer.WriteLineAsync(BuildCsvRow(headers, selectedIndexes)).ConfigureAwait(false);
+        var selectedHeaders = selectedIndexes.Select(index => headers[index]).ToArray();
+        var rows = new List<IReadOnlyList<string>>();
 
         while (!parser.EndOfData)
         {
@@ -74,22 +69,19 @@ internal sealed class CsvTableProcessor
                 continue;
             }
 
-            await writer.WriteLineAsync(BuildCsvRow(fields, selectedIndexes)).ConfigureAwait(false);
+            rows.Add(BuildSelectedRow(fields, selectedIndexes));
         }
 
-        await writer.FlushAsync().ConfigureAwait(false);
-        await output.FlushAsync().ConfigureAwait(false);
-        return null;
+        return ExecutionOutcome.Success(new TableQueryResult(selectedHeaders, rows));
     }
 
-    public async Task<string?> WriteDistinctRowsAsync(
+    public ExecutionOutcome DistinctRows(
         Stream input,
-        Stream output,
         IReadOnlyList<string> requestedColumns)
     {
         if (requestedColumns.Count == 0)
         {
-            return "No columns were selected.";
+            return ExecutionOutcome.Failure("No columns were selected.");
         }
 
         using var parser = CreateParser(input);
@@ -97,18 +89,16 @@ internal sealed class CsvTableProcessor
         var headers = parser.ReadFields();
         if (headers is null)
         {
-            return "CSV file is empty.";
+            return ExecutionOutcome.Failure("CSV file is empty.");
         }
 
         if (!TryResolveRequestedColumnIndexes(headers, requestedColumns, out var selectedIndexes, out var errorMessage))
         {
-            return errorMessage;
+            return ExecutionOutcome.Failure(errorMessage!);
         }
 
         var seenRows = new HashSet<string[]>(new StringArraySequenceComparer());
-
-        await using var writer = CreateWriter(output);
-        await writer.WriteLineAsync(BuildCsvRow(headers, selectedIndexes)).ConfigureAwait(false);
+        var rows = new List<IReadOnlyList<string>>();
 
         while (!parser.EndOfData)
         {
@@ -124,22 +114,20 @@ internal sealed class CsvTableProcessor
                 continue;
             }
 
-            await writer.WriteLineAsync(BuildCsvRow(fields, selectedIndexes)).ConfigureAwait(false);
+            rows.Add(BuildSelectedRow(fields, selectedIndexes));
         }
 
-        await writer.FlushAsync().ConfigureAwait(false);
-        await output.FlushAsync().ConfigureAwait(false);
-        return null;
+        var selectedHeaders = selectedIndexes.Select(index => headers[index]).ToArray();
+        return ExecutionOutcome.Success(new TableQueryResult(selectedHeaders, rows));
     }
 
-    public async Task<string?> WriteFilteredRowsAsync(
+    public ExecutionOutcome FilterRows(
         Stream input,
-        Stream output,
         string whereExpression)
     {
         if (!CsvWhereClause.TryParse(whereExpression, out var clause, out var errorMessage))
         {
-            return errorMessage;
+            return ExecutionOutcome.Failure(errorMessage);
         }
 
         using var parser = CreateParser(input);
@@ -147,7 +135,7 @@ internal sealed class CsvTableProcessor
         var headers = parser.ReadFields();
         if (headers is null)
         {
-            return "CSV file is empty.";
+            return ExecutionOutcome.Failure("CSV file is empty.");
         }
 
         var filteredColumnIndex = Array.FindIndex(
@@ -156,12 +144,10 @@ internal sealed class CsvTableProcessor
 
         if (filteredColumnIndex < 0)
         {
-            return $"Column not found: {clause.ColumnName}";
+            return ExecutionOutcome.Failure($"Column not found: {clause.ColumnName}");
         }
 
-        await using var writer = CreateWriter(output);
-        var allColumns = Enumerable.Range(0, headers.Length).ToArray();
-        await writer.WriteLineAsync(BuildCsvRow(headers, allColumns)).ConfigureAwait(false);
+        var rows = new List<IReadOnlyList<string>>();
 
         while (!parser.EndOfData)
         {
@@ -177,23 +163,20 @@ internal sealed class CsvTableProcessor
                 continue;
             }
 
-            await writer.WriteLineAsync(BuildCsvRow(fields, allColumns)).ConfigureAwait(false);
+            rows.Add(fields);
         }
 
-        await writer.FlushAsync().ConfigureAwait(false);
-        await output.FlushAsync().ConfigureAwait(false);
-        return null;
+        return ExecutionOutcome.Success(new TableQueryResult(headers, rows));
     }
 
-    public async Task<string?> WriteSortedRowsAsync(
+    public ExecutionOutcome SortRows(
         Stream input,
-        Stream output,
         string columnName,
         string? directionArgument)
     {
         if (!TryParseSortDirection(directionArgument, out var sortDirection, out var errorMessage))
         {
-            return errorMessage;
+            return ExecutionOutcome.Failure(errorMessage!);
         }
 
         using var parser = CreateParser(input);
@@ -201,7 +184,7 @@ internal sealed class CsvTableProcessor
         var headers = parser.ReadFields();
         if (headers is null)
         {
-            return "CSV file is empty.";
+            return ExecutionOutcome.Failure("CSV file is empty.");
         }
 
         var sortColumnIndex = Array.FindIndex(
@@ -210,7 +193,7 @@ internal sealed class CsvTableProcessor
 
         if (sortColumnIndex < 0)
         {
-            return $"Column not found: {columnName}";
+            return ExecutionOutcome.Failure($"Column not found: {columnName}");
         }
 
         var rows = new List<CsvRow>();
@@ -234,27 +217,17 @@ internal sealed class CsvTableProcessor
                 ? rows.OrderBy(row => row.SortValue.TextValue, StringComparer.Ordinal)
                 : rows.OrderByDescending(row => row.SortValue.TextValue, StringComparer.Ordinal);
 
-        await using var writer = CreateWriter(output);
-        await writer.WriteLineAsync(BuildCsvRow(headers)).ConfigureAwait(false);
-
-        foreach (var row in orderedRows)
-        {
-            await writer.WriteLineAsync(BuildCsvRow(row.Fields)).ConfigureAwait(false);
-        }
-
-        await writer.FlushAsync().ConfigureAwait(false);
-        await output.FlushAsync().ConfigureAwait(false);
-        return null;
+        var sortedRows = orderedRows.Select(row => row.Fields).ToArray();
+        return ExecutionOutcome.Success(new TableQueryResult(headers, sortedRows));
     }
 
-    public async Task<string?> WriteHeadRowsAsync(
+    public ExecutionOutcome HeadRows(
         Stream input,
-        Stream output,
         string rowCountArgument)
     {
         if (!TryParsePositiveRowCount(rowCountArgument, out var rowCount, out var errorMessage))
         {
-            return errorMessage;
+            return ExecutionOutcome.Failure(errorMessage!);
         }
 
         using var parser = CreateParser(input);
@@ -262,11 +235,10 @@ internal sealed class CsvTableProcessor
         var headers = parser.ReadFields();
         if (headers is null)
         {
-            return "CSV file is empty.";
+            return ExecutionOutcome.Failure("CSV file is empty.");
         }
 
-        await using var writer = CreateWriter(output);
-        await writer.WriteLineAsync(BuildCsvRow(headers)).ConfigureAwait(false);
+        var rows = new List<IReadOnlyList<string>>();
 
         while (rowCount > 0 && !parser.EndOfData)
         {
@@ -276,23 +248,21 @@ internal sealed class CsvTableProcessor
                 continue;
             }
 
-            await writer.WriteLineAsync(BuildCsvRow(fields)).ConfigureAwait(false);
+            rows.Add(fields);
             rowCount--;
         }
 
-        await writer.FlushAsync().ConfigureAwait(false);
-        await output.FlushAsync().ConfigureAwait(false);
-        return null;
+        return ExecutionOutcome.Success(new TableQueryResult(headers, rows));
     }
 
-    public async Task<string?> WriteCountAsync(Stream input, Stream output)
+    public ExecutionOutcome CountRows(Stream input)
     {
         using var parser = CreateParser(input);
 
         var headers = parser.ReadFields();
         if (headers is null)
         {
-            return "CSV file is empty.";
+            return ExecutionOutcome.Failure("CSV file is empty.");
         }
 
         var rowCount = 0;
@@ -307,21 +277,17 @@ internal sealed class CsvTableProcessor
             rowCount++;
         }
 
-        await using var writer = CreateWriter(output);
-        await writer.WriteLineAsync(rowCount.ToString(CultureInfo.InvariantCulture)).ConfigureAwait(false);
-        await writer.FlushAsync().ConfigureAwait(false);
-        await output.FlushAsync().ConfigureAwait(false);
-        return null;
+        return ExecutionOutcome.Success(new ScalarQueryResult(rowCount));
     }
 
-    public async Task<string?> WriteSumAsync(Stream input, Stream output, string columnName)
+    public ExecutionOutcome SumRows(Stream input, string columnName)
     {
         using var parser = CreateParser(input);
 
         var headers = parser.ReadFields();
         if (headers is null)
         {
-            return "CSV file is empty.";
+            return ExecutionOutcome.Failure("CSV file is empty.");
         }
 
         var columnIndex = Array.FindIndex(
@@ -330,7 +296,7 @@ internal sealed class CsvTableProcessor
 
         if (columnIndex < 0)
         {
-            return $"Column not found: {columnName}";
+            return ExecutionOutcome.Failure($"Column not found: {columnName}");
         }
 
         decimal total = 0m;
@@ -345,27 +311,22 @@ internal sealed class CsvTableProcessor
             var candidateValue = columnIndex < fields.Length ? fields[columnIndex] : string.Empty;
             if (!decimal.TryParse(candidateValue, NumberStyles.Number, CultureInfo.InvariantCulture, out var numericValue))
             {
-                return $"Column must contain only numeric values: {columnName}";
+                return ExecutionOutcome.Failure($"Column must contain only numeric values: {columnName}");
             }
 
             total += numericValue;
         }
 
-        await using var writer = CreateWriter(output);
-        await writer.WriteLineAsync(FormatDecimal(total)).ConfigureAwait(false);
-        await writer.FlushAsync().ConfigureAwait(false);
-        await output.FlushAsync().ConfigureAwait(false);
-        return null;
+        return ExecutionOutcome.Success(new ScalarQueryResult(total));
     }
 
-    public async Task<string?> WriteGroupedRowsAsync(
+    public ExecutionOutcome GroupRows(
         Stream input,
-        Stream output,
         IReadOnlyList<string> groupByArguments)
     {
         if (!GroupByRequest.TryParse(groupByArguments, out var request, out var errorMessage))
         {
-            return errorMessage;
+            return ExecutionOutcome.Failure(errorMessage);
         }
 
         using var parser = CreateParser(input);
@@ -373,12 +334,12 @@ internal sealed class CsvTableProcessor
         var headers = parser.ReadFields();
         if (headers is null)
         {
-            return "CSV file is empty.";
+            return ExecutionOutcome.Failure("CSV file is empty.");
         }
 
         if (!TryResolveColumnIndex(headers, request.GroupColumnName, out var groupColumnIndex))
         {
-            return $"Column not found: {request.GroupColumnName}";
+            return ExecutionOutcome.Failure($"Column not found: {request.GroupColumnName}");
         }
 
         var aggregateColumnIndex = -1;
@@ -386,7 +347,7 @@ internal sealed class CsvTableProcessor
         {
             if (!TryResolveColumnIndex(headers, request.AggregateColumnName!, out aggregateColumnIndex))
             {
-                return $"Column not found: {request.AggregateColumnName}";
+                return ExecutionOutcome.Failure($"Column not found: {request.AggregateColumnName}");
             }
         }
 
@@ -419,48 +380,39 @@ internal sealed class CsvTableProcessor
             var candidateValue = aggregateColumnIndex < fields.Length ? fields[aggregateColumnIndex] : string.Empty;
             if (!decimal.TryParse(candidateValue, NumberStyles.Number, CultureInfo.InvariantCulture, out var numericValue))
             {
-                return $"Column must contain only numeric values: {request.AggregateColumnName}";
+                return ExecutionOutcome.Failure($"Column must contain only numeric values: {request.AggregateColumnName}");
             }
 
             aggregation.Sum += numericValue;
         }
 
-        await using var writer = CreateWriter(output);
+        var rows = new List<IReadOnlyList<string>>(groups.Count);
         foreach (var group in groups)
         {
             var aggregateValue = request.AggregateKind is GroupByAggregateKind.Count
                 ? group.RowCount.ToString(CultureInfo.InvariantCulture)
                 : FormatDecimal(group.Sum);
 
-            await writer.WriteLineAsync(BuildCsvRow([group.GroupValue, aggregateValue])).ConfigureAwait(false);
+            rows.Add([group.GroupValue, aggregateValue]);
         }
 
-        await writer.FlushAsync().ConfigureAwait(false);
-        await output.FlushAsync().ConfigureAwait(false);
-        return null;
+        var resultHeaders = request.AggregateKind is GroupByAggregateKind.Count
+            ? new[] { request.GroupColumnName, "count" }
+            : new[] { request.GroupColumnName, request.AggregateColumnName! };
+
+        return ExecutionOutcome.Success(new TableQueryResult(resultHeaders, rows));
     }
 
-    private static string BuildCsvRow(IReadOnlyList<string> fields, IReadOnlyList<int> selectedIndexes)
+    private static string[] BuildSelectedRow(IReadOnlyList<string> fields, IReadOnlyList<int> selectedIndexes)
     {
         var selectedFields = new string[selectedIndexes.Count];
         for (var i = 0; i < selectedIndexes.Count; i++)
         {
             var selectedIndex = selectedIndexes[i];
-            selectedFields[i] = selectedIndex < fields.Count ? EscapeCsvField(fields[selectedIndex]) : string.Empty;
+            selectedFields[i] = selectedIndex < fields.Count ? fields[selectedIndex] : string.Empty;
         }
 
-        return string.Join(",", selectedFields);
-    }
-
-    private static string BuildCsvRow(IReadOnlyList<string> fields)
-    {
-        var outputFields = new string[fields.Count];
-        for (var i = 0; i < fields.Count; i++)
-        {
-            outputFields[i] = EscapeCsvField(fields[i]);
-        }
-
-        return string.Join(",", outputFields);
+        return selectedFields;
     }
 
     private static bool TryResolveRequestedColumnIndexes(
@@ -597,35 +549,6 @@ internal sealed class CsvTableProcessor
 
         parser.SetDelimiters(",");
         return parser;
-    }
-
-    private static StreamWriter CreateWriter(Stream output)
-    {
-        return new StreamWriter(output, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), leaveOpen: true)
-        {
-            NewLine = "\r\n"
-        };
-    }
-
-    private static string EscapeCsvField(string value)
-    {
-        if (value.Length == 0)
-        {
-            return string.Empty;
-        }
-
-        var requiresQuoting = value.Contains(',') ||
-            value.Contains('"') ||
-            value.Contains('\r') ||
-            value.Contains('\n');
-
-        if (!requiresQuoting)
-        {
-            return value;
-        }
-
-        var escaped = value.Replace("\"", "\"\"");
-        return $"\"{escaped}\"";
     }
 
     private static string FormatDecimal(decimal value)
