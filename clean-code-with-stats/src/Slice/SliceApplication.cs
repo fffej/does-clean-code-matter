@@ -4,6 +4,7 @@ public sealed class SliceApplication
 {
     private readonly Stream _output;
     private readonly TextWriter _error;
+    private readonly CsvColumnSelector _columnSelector = new();
 
     public SliceApplication(Stream output, TextWriter error)
     {
@@ -13,9 +14,9 @@ public sealed class SliceApplication
 
     public async Task<int> RunAsync(IReadOnlyList<string> args)
     {
-        if (args.Count != 1)
+        if (args.Count != 3 || !string.Equals(args[1], "select", StringComparison.Ordinal))
         {
-            await _error.WriteLineAsync("Usage: slice <csv-file>");
+            await _error.WriteLineAsync("Usage: slice <csv-file> select <columns>");
             return 1;
         }
 
@@ -26,9 +27,18 @@ public sealed class SliceApplication
             return 1;
         }
 
+        IReadOnlyList<string> selectedColumns = _columnSelector.ParseRequestedColumns(args[2]);
+
         await using var input = File.OpenRead(inputPath);
-        await input.CopyToAsync(_output).ConfigureAwait(false);
-        await _output.FlushAsync().ConfigureAwait(false);
+        var selectionResult = await _columnSelector.WriteSelectedColumnsAsync(input, _output, selectedColumns)
+            .ConfigureAwait(false);
+
+        if (selectionResult is not null)
+        {
+            await _error.WriteLineAsync(selectionResult);
+            return 1;
+        }
+
         return 0;
     }
 }
