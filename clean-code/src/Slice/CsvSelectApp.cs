@@ -1,38 +1,17 @@
-using System.Text;
-
 namespace Slice;
 
 public static class CsvSelectApp
 {
     public static int Run(string csvPath, string selectedColumnsArgument, Stream output, TextWriter error)
     {
-        if (!File.Exists(csvPath))
-        {
-            error.WriteLine($"Input file not found: {csvPath}");
-            return 1;
-        }
-
         IReadOnlyList<string> selectedColumns = ParseSelectedColumns(selectedColumnsArgument, error);
         if (selectedColumns.Count == 0)
         {
             return 1;
         }
 
-        List<IReadOnlyList<string>> rows;
-        try
+        if (!CsvInputReader.TryReadRows(csvPath, error, out List<IReadOnlyList<string>> rows))
         {
-            using StreamReader reader = File.OpenText(csvPath);
-            rows = CsvParser.Parse(reader);
-        }
-        catch (FormatException exception)
-        {
-            error.WriteLine(exception.Message);
-            return 1;
-        }
-
-        if (rows.Count == 0)
-        {
-            error.WriteLine("Input file is empty.");
             return 1;
         }
 
@@ -43,7 +22,7 @@ public static class CsvSelectApp
             return 1;
         }
 
-        using StreamWriter writer = new(output, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), leaveOpen: true);
+        using StreamWriter writer = new(output, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false), leaveOpen: true);
         WriteSelectedRows(writer, rows, columnIndexes);
         writer.Flush();
         output.Flush();
@@ -71,7 +50,7 @@ public static class CsvSelectApp
         for (int columnIndex = 0; columnIndex < selectedColumns.Count; columnIndex++)
         {
             string selectedColumn = selectedColumns[columnIndex];
-            int headerIndex = FindHeaderIndex(header, selectedColumn);
+            int headerIndex = CsvHeaderLookup.FindHeaderIndex(header, selectedColumn);
             if (headerIndex < 0)
             {
                 error.WriteLine($"Column not found: {selectedColumn}");
@@ -82,19 +61,6 @@ public static class CsvSelectApp
         }
 
         return indexes;
-    }
-
-    private static int FindHeaderIndex(IReadOnlyList<string> header, string selectedColumn)
-    {
-        for (int index = 0; index < header.Count; index++)
-        {
-            if (string.Equals(header[index], selectedColumn, StringComparison.Ordinal))
-            {
-                return index;
-            }
-        }
-
-        return -1;
     }
 
     private static void WriteSelectedRows(

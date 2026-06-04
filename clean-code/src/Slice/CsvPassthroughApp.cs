@@ -14,8 +14,14 @@ public static class CsvPassthroughApp
             return CsvSelectApp.Run(args[0], args[2], output, error);
         }
 
+        if (args.Length == 3 && string.Equals(args[1], "where", StringComparison.Ordinal))
+        {
+            return CsvWhereApp.Run(args[0], args[2], output, error);
+        }
+
         error.WriteLine("Usage: slice <csv-file>");
         error.WriteLine("Usage: slice <csv-file> select <column1,column2,...>");
+        error.WriteLine("Usage: slice <csv-file> where <column><operator><value>");
         return 1;
     }
 
