@@ -64,6 +64,17 @@ public static class SliceApp
 
                 CsvRoundTripper.WriteHeadRows(args[0], rowCount, outputStream);
             }
+            else if (string.Equals(args[1], "distinct", StringComparison.Ordinal))
+            {
+                if (args.Length < 3)
+                {
+                    WriteUsage(stderr);
+                    return 1;
+                }
+
+                var distinctColumns = args.Skip(2).ToArray();
+                CsvRoundTripper.WriteDistinctRows(args[0], distinctColumns, outputStream);
+            }
             else
             {
                 WriteUsage(stderr);
@@ -85,6 +96,7 @@ public static class SliceApp
         stderr.WriteLine("   or: slice <csv-file> where <column><operator><value>");
         stderr.WriteLine("   or: slice <csv-file> sort <column> [asc|desc]");
         stderr.WriteLine("   or: slice <csv-file> head <positive-integer>");
+        stderr.WriteLine("   or: slice <csv-file> distinct <column1> [column2 ...]");
     }
 }
 
@@ -274,6 +286,56 @@ public static class CsvRoundTripper
         writer.Flush();
     }
 
+    public static void WriteDistinctRows(string path, IReadOnlyList<string> distinctColumns, Stream output)
+    {
+        if (distinctColumns.Count == 0)
+        {
+            throw new InvalidOperationException("At least one column must be specified");
+        }
+
+        using var reader = new StreamReader(File.OpenRead(path));
+        using var writer = new StreamWriter(output, leaveOpen: true)
+        {
+            NewLine = Environment.NewLine
+        };
+
+        var headerLine = reader.ReadLine() ?? throw new InvalidOperationException("CSV file is empty");
+        var headers = ParseCsvLine(headerLine);
+        var headerIndexes = headers
+            .Select((header, index) => new { header, index })
+            .ToDictionary(x => x.header, x => x.index, StringComparer.Ordinal);
+
+        var distinctIndexes = distinctColumns
+            .Select(columnName => headerIndexes.TryGetValue(columnName, out var index)
+                ? index
+                : throw new InvalidOperationException($"Column not found: {columnName}"))
+            .ToArray();
+
+        writer.WriteLine(string.Join(",", distinctColumns));
+
+        var seenKeys = new HashSet<string[]>(new StringArrayComparer());
+        string? line;
+        while ((line = reader.ReadLine()) is not null)
+        {
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
+            var values = ParseCsvLine(line);
+            var key = distinctIndexes.Select(index => GetValue(values, index)).ToArray();
+            if (!seenKeys.Add(key))
+            {
+                continue;
+            }
+
+            var projectedValues = distinctIndexes.Select(index => GetValue(values, index));
+            writer.WriteLine(string.Join(",", projectedValues));
+        }
+
+        writer.Flush();
+    }
+
     private static string GetValue(IReadOnlyList<string> values, int index)
     {
         return index < values.Count ? values[index] : string.Empty;
@@ -413,6 +475,43 @@ public static class CsvRoundTripper
 
         values.Add(current.ToString());
         return values;
+    }
+
+    private sealed class StringArrayComparer : IEqualityComparer<string[]>
+    {
+        public bool Equals(string[]? x, string[]? y)
+        {
+            if (ReferenceEquals(x, y))
+            {
+                return true;
+            }
+
+            if (x is null || y is null || x.Length != y.Length)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < x.Length; i++)
+            {
+                if (!string.Equals(x[i], y[i], StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        public int GetHashCode(string[] obj)
+        {
+            var hash = new HashCode();
+            foreach (var value in obj)
+            {
+                hash.Add(value, StringComparer.Ordinal);
+            }
+
+            return hash.ToHashCode();
+        }
     }
 
     private enum ComparisonOperator

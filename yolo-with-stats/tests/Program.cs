@@ -18,6 +18,9 @@ var tests = new List<(string Name, Action Test)>
     ("sorts rows ascending by default", SortsRowsAscendingByDefault),
     ("sorts text rows descending", SortsTextRowsDescending),
     ("returns failure when a sort column is missing", ReturnsFailureWhenSortColumnIsMissing),
+    ("removes duplicate rows for a single distinct column", RemovesDuplicateRowsForASingleDistinctColumn),
+    ("removes duplicate rows for multiple distinct columns", RemovesDuplicateRowsForMultipleDistinctColumns),
+    ("returns failure when a distinct column is missing", ReturnsFailureWhenDistinctColumnIsMissing),
 };
 
 var failures = 0;
@@ -390,6 +393,97 @@ static void ReturnsFailureWhenSortColumnIsMissing()
         using var output = new MemoryStream();
         using var stderr = new StringWriter();
         var exitCode = SliceApp.Run([tempPath, "sort", "city"], stderr, output);
+        if (exitCode == 0)
+        {
+            throw new Exception("expected non-zero exit code");
+        }
+
+        if (!stderr.ToString().Contains("Column not found: city", StringComparison.Ordinal))
+        {
+            throw new Exception($"unexpected error output: {stderr}");
+        }
+    }
+    finally
+    {
+        File.Delete(tempPath);
+    }
+}
+
+static void RemovesDuplicateRowsForASingleDistinctColumn()
+{
+    var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
+    File.WriteAllText(tempPath, """
+        name,city
+        Ada,London
+        Grace,Paris
+        Katherine,London
+        Barbara,New York
+        Dorothy,Paris
+        """.ReplaceLineEndings("\r\n"));
+
+    try
+    {
+        using var output = new MemoryStream();
+        using var stderr = new StringWriter();
+        var exitCode = SliceApp.Run([tempPath, "distinct", "city"], stderr, output);
+        if (exitCode != 0)
+        {
+            throw new Exception($"expected success, got exit code {exitCode}: {stderr}");
+        }
+
+        var result = Encoding.UTF8.GetString(output.ToArray());
+        var expected = $"city{Environment.NewLine}London{Environment.NewLine}Paris{Environment.NewLine}New York{Environment.NewLine}";
+        if (result != expected)
+        {
+            throw new Exception($"unexpected output: {result}");
+        }
+    }
+    finally
+    {
+        File.Delete(tempPath);
+    }
+}
+
+static void RemovesDuplicateRowsForMultipleDistinctColumns()
+{
+    var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
+    File.WriteAllText(tempPath, """
+        name,city,role
+        Ada,London,admin
+        Grace,London,user
+        Katherine,Paris,admin
+        Barbara,London,admin
+        Dorothy,Paris,user
+        """.ReplaceLineEndings("\r\n"));
+
+    try
+    {
+        using var output = new MemoryStream();
+        CsvRoundTripper.WriteDistinctRows(tempPath, new[] { "city", "role" }, output);
+
+        var result = Encoding.UTF8.GetString(output.ToArray());
+        var expected = $"city,role{Environment.NewLine}London,admin{Environment.NewLine}London,user{Environment.NewLine}Paris,admin{Environment.NewLine}Paris,user{Environment.NewLine}";
+        if (result != expected)
+        {
+            throw new Exception($"unexpected output: {result}");
+        }
+    }
+    finally
+    {
+        File.Delete(tempPath);
+    }
+}
+
+static void ReturnsFailureWhenDistinctColumnIsMissing()
+{
+    var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
+    File.WriteAllText(tempPath, "name,age\r\nAda,36\r\n");
+
+    try
+    {
+        using var output = new MemoryStream();
+        using var stderr = new StringWriter();
+        var exitCode = SliceApp.Run([tempPath, "distinct", "city"], stderr, output);
         if (exitCode == 0)
         {
             throw new Exception("expected non-zero exit code");
