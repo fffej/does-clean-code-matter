@@ -82,6 +82,85 @@ public sealed class SliceApplicationTests
     }
 
     [TestMethod]
+    public async Task RunAsync_WithDistinctCommand_WritesEachUniqueValueOnceInFirstSeenOrder()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.csv");
+        var input = string.Join("\r\n", [
+            "name,age,city",
+            "Ada,36,London",
+            "Bob,29,Paris",
+            "Carol,31,London",
+            "Dave,40,Berlin",
+            "Eve,25,Paris",
+            string.Empty
+        ]);
+        var expected = string.Join("\r\n", [
+            "city",
+            "London",
+            "Paris",
+            "Berlin",
+            string.Empty
+        ]);
+        var inputBytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(input);
+        var expectedBytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(expected);
+
+        try
+        {
+            await File.WriteAllBytesAsync(tempFile, inputBytes);
+
+            await using var output = new MemoryStream();
+            var app = new SliceApplication(output, TextWriter.Null);
+
+            var exitCode = await app.RunAsync([tempFile, "distinct", "city"]);
+
+            Assert.AreEqual(0, exitCode);
+            CollectionAssert.AreEqual(expectedBytes, output.ToArray());
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    [TestMethod]
+    public async Task RunAsync_WithDistinctCommandAndMissingColumn_ReturnsAnError()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.csv");
+        var input = string.Join("\r\n", [
+            "name,age,city",
+            "Ada,36,London",
+            "Bob,29,Paris",
+            string.Empty
+        ]);
+        var inputBytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(input);
+
+        try
+        {
+            await File.WriteAllBytesAsync(tempFile, inputBytes);
+
+            await using var output = new MemoryStream();
+            var error = new StringWriter();
+            var app = new SliceApplication(output, error);
+
+            var exitCode = await app.RunAsync([tempFile, "distinct", "country"]);
+
+            Assert.AreEqual(1, exitCode);
+            StringAssert.Contains(error.ToString(), "Column not found: country");
+            Assert.AreEqual(0, output.Length);
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    [TestMethod]
     public async Task RunAsync_WithMissingFile_ReturnsAnError()
     {
         await using var output = new MemoryStream();
@@ -105,7 +184,7 @@ public sealed class SliceApplicationTests
         var exitCode = await app.RunAsync([]);
 
         Assert.AreEqual(1, exitCode);
-        StringAssert.Contains(error.ToString(), "Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc] | head <count>");
+        StringAssert.Contains(error.ToString(), "Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc] | head <count> | distinct <column> [<column>...]");
         Assert.AreEqual(0, output.Length);
     }
 

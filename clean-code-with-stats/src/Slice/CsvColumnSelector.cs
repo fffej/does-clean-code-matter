@@ -8,13 +8,25 @@ internal sealed class CsvTableProcessor
 {
     public IReadOnlyList<string> ParseRequestedColumns(string columnsArgument)
     {
-        if (string.IsNullOrWhiteSpace(columnsArgument))
+        return ParseRequestedColumns(new[] { columnsArgument });
+    }
+
+    public IReadOnlyList<string> ParseRequestedColumns(IEnumerable<string> columnArguments)
+    {
+        var requestedColumns = new List<string>();
+
+        foreach (var columnArgument in columnArguments)
         {
-            return Array.Empty<string>();
+            if (string.IsNullOrWhiteSpace(columnArgument))
+            {
+                continue;
+            }
+
+            requestedColumns.AddRange(
+                columnArgument.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
         }
 
-        return columnsArgument
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return requestedColumns;
     }
 
     public async Task<string?> WriteSelectedColumnsAsync(
@@ -42,17 +54,9 @@ internal sealed class CsvTableProcessor
             return "CSV file is empty.";
         }
 
-        var selectedIndexes = new int[requestedColumns.Count];
-        for (var i = 0; i < requestedColumns.Count; i++)
+        if (!TryResolveRequestedColumnIndexes(headers, requestedColumns, out var selectedIndexes, out var errorMessage))
         {
-            var requestedColumn = requestedColumns[i];
-            var index = Array.FindIndex(headers, header => string.Equals(header, requestedColumn, StringComparison.OrdinalIgnoreCase));
-            if (index < 0)
-            {
-                return $"Column not found: {requestedColumn}";
-            }
-
-            selectedIndexes[i] = index;
+            return errorMessage;
         }
 
         await using var writer = new StreamWriter(output, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), leaveOpen: true)
@@ -66,6 +70,56 @@ internal sealed class CsvTableProcessor
         {
             var fields = parser.ReadFields();
             if (fields is null)
+            {
+                continue;
+            }
+
+            await writer.WriteLineAsync(BuildCsvRow(fields, selectedIndexes)).ConfigureAwait(false);
+        }
+
+        await writer.FlushAsync().ConfigureAwait(false);
+        await output.FlushAsync().ConfigureAwait(false);
+        return null;
+    }
+
+    public async Task<string?> WriteDistinctRowsAsync(
+        Stream input,
+        Stream output,
+        IReadOnlyList<string> requestedColumns)
+    {
+        if (requestedColumns.Count == 0)
+        {
+            return "No columns were selected.";
+        }
+
+        using var parser = CreateParser(input);
+
+        var headers = parser.ReadFields();
+        if (headers is null)
+        {
+            return "CSV file is empty.";
+        }
+
+        if (!TryResolveRequestedColumnIndexes(headers, requestedColumns, out var selectedIndexes, out var errorMessage))
+        {
+            return errorMessage;
+        }
+
+        var seenRows = new HashSet<string[]>(new StringArraySequenceComparer());
+
+        await using var writer = CreateWriter(output);
+        await writer.WriteLineAsync(BuildCsvRow(headers, selectedIndexes)).ConfigureAwait(false);
+
+        while (!parser.EndOfData)
+        {
+            var fields = parser.ReadFields();
+            if (fields is null)
+            {
+                continue;
+            }
+
+            var distinctKey = BuildDistinctKey(fields, selectedIndexes);
+            if (!seenRows.Add(distinctKey))
             {
                 continue;
             }
@@ -254,6 +308,53 @@ internal sealed class CsvTableProcessor
         return string.Join(",", outputFields);
     }
 
+    private static bool TryResolveRequestedColumnIndexes(
+        IReadOnlyList<string> headers,
+        IReadOnlyList<string> requestedColumns,
+        out int[] selectedIndexes,
+        out string? errorMessage)
+    {
+        selectedIndexes = new int[requestedColumns.Count];
+
+        for (var i = 0; i < requestedColumns.Count; i++)
+        {
+            var requestedColumn = requestedColumns[i];
+            var index = -1;
+            for (var headerIndex = 0; headerIndex < headers.Count; headerIndex++)
+            {
+                if (string.Equals(headers[headerIndex], requestedColumn, StringComparison.OrdinalIgnoreCase))
+                {
+                    index = headerIndex;
+                    break;
+                }
+            }
+
+            if (index < 0)
+            {
+                errorMessage = $"Column not found: {requestedColumn}";
+                selectedIndexes = Array.Empty<int>();
+                return false;
+            }
+
+            selectedIndexes[i] = index;
+        }
+
+        errorMessage = null;
+        return true;
+    }
+
+    private static string[] BuildDistinctKey(IReadOnlyList<string> fields, IReadOnlyList<int> selectedIndexes)
+    {
+        var selectedFields = new string[selectedIndexes.Count];
+        for (var i = 0; i < selectedIndexes.Count; i++)
+        {
+            var selectedIndex = selectedIndexes[i];
+            selectedFields[i] = selectedIndex < fields.Count ? fields[selectedIndex] : string.Empty;
+        }
+
+        return selectedFields;
+    }
+
     private static SortValue GetSortValue(IReadOnlyList<string> fields, int sortColumnIndex)
     {
         var value = sortColumnIndex < fields.Count ? fields[sortColumnIndex] : string.Empty;
@@ -357,6 +458,43 @@ internal sealed class CsvTableProcessor
     private sealed record CsvRow(IReadOnlyList<string> Fields, SortValue SortValue);
 
     private sealed record SortValue(bool IsNumeric, decimal NumericValue, string TextValue);
+
+    private sealed class StringArraySequenceComparer : IEqualityComparer<string[]>
+    {
+        public bool Equals(string[]? x, string[]? y)
+        {
+            if (ReferenceEquals(x, y))
+            {
+                return true;
+            }
+
+            if (x is null || y is null || x.Length != y.Length)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < x.Length; i++)
+            {
+                if (!string.Equals(x[i], y[i], StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        public int GetHashCode(string[] obj)
+        {
+            var hashCode = new HashCode();
+            foreach (var value in obj)
+            {
+                hashCode.Add(value, StringComparer.Ordinal);
+            }
+
+            return hashCode.ToHashCode();
+        }
+    }
 
     private enum SortDirection
     {

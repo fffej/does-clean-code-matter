@@ -2,6 +2,8 @@ namespace Slice;
 
 public sealed class SliceApplication
 {
+    private const string UsageMessage = "Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc] | head <count> | distinct <column> [<column>...]";
+
     private readonly Stream _output;
     private readonly TextWriter _error;
     private readonly CsvTableProcessor _csvProcessor = new();
@@ -14,9 +16,9 @@ public sealed class SliceApplication
 
     public async Task<int> RunAsync(IReadOnlyList<string> args)
     {
-        if (!TryParseArguments(args, out var inputPath, out var command, out var commandArgument, out var secondaryArgument))
+        if (!TryParseArguments(args, out var inputPath, out var command, out var commandArguments))
         {
-            await _error.WriteLineAsync("Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc] | head <count>");
+            await _error.WriteLineAsync(UsageMessage);
             return 1;
         }
 
@@ -30,11 +32,12 @@ public sealed class SliceApplication
 
         string? result = command switch
         {
-            "select" => await ExecuteSelectAsync(input, commandArgument).ConfigureAwait(false),
-            "where" => await _csvProcessor.WriteFilteredRowsAsync(input, _output, commandArgument).ConfigureAwait(false),
-            "sort" => await _csvProcessor.WriteSortedRowsAsync(input, _output, commandArgument, secondaryArgument).ConfigureAwait(false),
-            "head" => await _csvProcessor.WriteHeadRowsAsync(input, _output, commandArgument).ConfigureAwait(false),
-            _ => "Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc] | head <count>"
+            "select" => await ExecuteSelectAsync(input, commandArguments[0]).ConfigureAwait(false),
+            "where" => await _csvProcessor.WriteFilteredRowsAsync(input, _output, commandArguments[0]).ConfigureAwait(false),
+            "sort" => await _csvProcessor.WriteSortedRowsAsync(input, _output, commandArguments[0], commandArguments.Count > 1 ? commandArguments[1] : null).ConfigureAwait(false),
+            "head" => await _csvProcessor.WriteHeadRowsAsync(input, _output, commandArguments[0]).ConfigureAwait(false),
+            "distinct" => await ExecuteDistinctAsync(input, commandArguments).ConfigureAwait(false),
+            _ => UsageMessage
         };
 
         if (result is null)
@@ -52,42 +55,37 @@ public sealed class SliceApplication
         return _csvProcessor.WriteSelectedColumnsAsync(input, _output, selectedColumns);
     }
 
+    private Task<string?> ExecuteDistinctAsync(Stream input, IReadOnlyList<string> columnArguments)
+    {
+        IReadOnlyList<string> distinctColumns = _csvProcessor.ParseRequestedColumns(columnArguments);
+        return _csvProcessor.WriteDistinctRowsAsync(input, _output, distinctColumns);
+    }
+
     private static bool TryParseArguments(
         IReadOnlyList<string> args,
         out string inputPath,
         out string command,
-        out string commandArgument,
-        out string? secondaryArgument)
+        out IReadOnlyList<string> commandArguments)
     {
         inputPath = string.Empty;
         command = string.Empty;
-        commandArgument = string.Empty;
-        secondaryArgument = null;
+        commandArguments = Array.Empty<string>();
 
-        if (args.Count < 3 || args.Count > 4)
+        if (args.Count < 3)
         {
             return false;
         }
 
         inputPath = args[0];
         command = args[1];
-        commandArgument = args[2];
-
-        if (args.Count == 4)
-        {
-            secondaryArgument = args[3];
-            if (!string.Equals(command, "sort", StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-        }
+        commandArguments = args.Count > 2 ? args.Skip(2).ToArray() : Array.Empty<string>();
 
         return command switch
         {
-            "select" or "where" or "head" => args.Count == 3,
-            "sort" => args.Count is 3 or 4,
+            "select" or "where" or "head" => commandArguments.Count == 1,
+            "sort" => commandArguments.Count is 1 or 2,
+            "distinct" => commandArguments.Count >= 1,
             _ => false
         };
     }
-
 }
