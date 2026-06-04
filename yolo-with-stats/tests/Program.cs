@@ -19,6 +19,9 @@ var tests = new List<(string Name, Action Test)>
     ("sums a numeric column", SumsANumericColumn),
     ("returns failure when sum column values are nonnumeric", ReturnsFailureWhenSumColumnValuesAreNonnumeric),
     ("returns failure when sum column is missing", ReturnsFailureWhenSumColumnIsMissing),
+    ("groups rows and counts them", GroupsRowsAndCountsThem),
+    ("groups rows and sums a numeric column", GroupsRowsAndSumsANumericColumn),
+    ("returns failure when a groupby sum column is missing", ReturnsFailureWhenGroupBySumColumnIsMissing),
     ("sorts numeric rows descending", SortsNumericRowsDescending),
     ("sorts rows ascending by default", SortsRowsAscendingByDefault),
     ("sorts text rows descending", SortsTextRowsDescending),
@@ -468,6 +471,102 @@ static void ReturnsFailureWhenSumColumnIsMissing()
         using var output = new MemoryStream();
         using var stderr = new StringWriter();
         var exitCode = SliceApp.Run([tempPath, "sum", "total"], stderr, output);
+        if (exitCode == 0)
+        {
+            throw new Exception("expected non-zero exit code");
+        }
+
+        if (!stderr.ToString().Contains("Column not found: total", StringComparison.Ordinal))
+        {
+            throw new Exception($"unexpected error output: {stderr}");
+        }
+    }
+    finally
+    {
+        File.Delete(tempPath);
+    }
+}
+
+static void GroupsRowsAndCountsThem()
+{
+    var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
+    File.WriteAllText(tempPath, """
+        name,city
+        Ada,London
+        Grace,Paris
+        Katherine,London
+        Barbara,New York
+        Dorothy,Paris
+        """.ReplaceLineEndings("\r\n"));
+
+    try
+    {
+        using var output = new MemoryStream();
+        using var stderr = new StringWriter();
+        var exitCode = SliceApp.Run([tempPath, "groupby", "city", "count"], stderr, output);
+        if (exitCode != 0)
+        {
+            throw new Exception($"expected success, got exit code {exitCode}: {stderr}");
+        }
+
+        var result = Encoding.UTF8.GetString(output.ToArray());
+        var expected = $"city,count{Environment.NewLine}London,2{Environment.NewLine}Paris,2{Environment.NewLine}New York,1{Environment.NewLine}";
+        if (result != expected)
+        {
+            throw new Exception($"unexpected output: {result}");
+        }
+    }
+    finally
+    {
+        File.Delete(tempPath);
+    }
+}
+
+static void GroupsRowsAndSumsANumericColumn()
+{
+    var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
+    File.WriteAllText(tempPath, """
+        city,amount
+        Paris,7.5
+        London,10
+        Paris,2.25
+        New York,1
+        London,3
+        """.ReplaceLineEndings("\r\n"));
+
+    try
+    {
+        using var output = new MemoryStream();
+        using var stderr = new StringWriter();
+        var exitCode = SliceApp.Run([tempPath, "groupby", "city", "sum", "amount"], stderr, output);
+        if (exitCode != 0)
+        {
+            throw new Exception($"expected success, got exit code {exitCode}: {stderr}");
+        }
+
+        var result = Encoding.UTF8.GetString(output.ToArray());
+        var expected = $"city,sum{Environment.NewLine}Paris,9.75{Environment.NewLine}London,13{Environment.NewLine}New York,1{Environment.NewLine}";
+        if (result != expected)
+        {
+            throw new Exception($"unexpected output: {result}");
+        }
+    }
+    finally
+    {
+        File.Delete(tempPath);
+    }
+}
+
+static void ReturnsFailureWhenGroupBySumColumnIsMissing()
+{
+    var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
+    File.WriteAllText(tempPath, "city,amount\r\nLondon,10\r\n");
+
+    try
+    {
+        using var output = new MemoryStream();
+        using var stderr = new StringWriter();
+        var exitCode = SliceApp.Run([tempPath, "groupby", "city", "sum", "total"], stderr, output);
         if (exitCode == 0)
         {
             throw new Exception("expected non-zero exit code");

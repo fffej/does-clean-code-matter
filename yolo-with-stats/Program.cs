@@ -153,6 +153,37 @@ public static class SliceApp
                 index += 2;
                 return index == args.Length;
             }
+            else if (IsCommand(token, "groupby"))
+            {
+                if (index + 2 >= args.Length)
+                {
+                    return false;
+                }
+
+                var groupColumnName = args[index + 1];
+                var aggregateName = args[index + 2];
+
+                if (IsCommand(aggregateName, "count"))
+                {
+                    commands.Add(new PipelineCommand(PipelineCommandKind.GroupByCount, groupColumnName));
+                    index += 3;
+                    return index == args.Length;
+                }
+
+                if (IsCommand(aggregateName, "sum"))
+                {
+                    if (index + 3 >= args.Length)
+                    {
+                        return false;
+                    }
+
+                    commands.Add(new PipelineCommand(PipelineCommandKind.GroupBySum, groupColumnName, args[index + 3]));
+                    index += 4;
+                    return index == args.Length;
+                }
+
+                return false;
+            }
             else
             {
                 return false;
@@ -234,6 +265,12 @@ public static class SliceApp
                 case PipelineCommandKind.Sum:
                     WriteAggregateSum(table, command.FirstArgument, outputStream);
                     return;
+                case PipelineCommandKind.GroupByCount:
+                    WriteGroupedCount(table, command.FirstArgument, outputStream);
+                    return;
+                case PipelineCommandKind.GroupBySum:
+                    WriteGroupedSum(table, command.FirstArgument, command.SecondArgument ?? string.Empty, outputStream);
+                    return;
                 default:
                     throw new ArgumentOutOfRangeException();
             }
@@ -289,6 +326,91 @@ public static class SliceApp
         };
 
         writer.WriteLine(total.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        writer.Flush();
+    }
+
+    private static void WriteGroupedCount(CsvTable table, string groupColumnName, Stream outputStream)
+    {
+        var headerIndexes = BuildHeaderIndex(table.Headers);
+        if (!headerIndexes.TryGetValue(groupColumnName, out var groupColumnIndex))
+        {
+            throw new InvalidOperationException($"Column not found: {groupColumnName}");
+        }
+
+        var groupOrder = new List<string>();
+        var groupCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        foreach (var row in table.Rows)
+        {
+            var groupValue = GetValue(row, groupColumnIndex);
+            if (!groupCounts.ContainsKey(groupValue))
+            {
+                groupOrder.Add(groupValue);
+                groupCounts[groupValue] = 0;
+            }
+
+            groupCounts[groupValue]++;
+        }
+
+        using var writer = new StreamWriter(outputStream, leaveOpen: true)
+        {
+            NewLine = Environment.NewLine
+        };
+
+        writer.WriteLine(string.Join(",", new[] { groupColumnName, "count" }));
+        foreach (var groupValue in groupOrder)
+        {
+            writer.WriteLine(string.Join(",", new[] { groupValue, groupCounts[groupValue].ToString(System.Globalization.CultureInfo.InvariantCulture) }));
+        }
+
+        writer.Flush();
+    }
+
+    private static void WriteGroupedSum(CsvTable table, string groupColumnName, string valueColumnName, Stream outputStream)
+    {
+        var headerIndexes = BuildHeaderIndex(table.Headers);
+        if (!headerIndexes.TryGetValue(groupColumnName, out var groupColumnIndex))
+        {
+            throw new InvalidOperationException($"Column not found: {groupColumnName}");
+        }
+
+        if (!headerIndexes.TryGetValue(valueColumnName, out var valueColumnIndex))
+        {
+            throw new InvalidOperationException($"Column not found: {valueColumnName}");
+        }
+
+        var groupOrder = new List<string>();
+        var groupTotals = new Dictionary<string, decimal>(StringComparer.Ordinal);
+
+        foreach (var row in table.Rows)
+        {
+            var groupValue = GetValue(row, groupColumnIndex);
+            var value = GetValue(row, valueColumnIndex);
+            if (!decimal.TryParse(value, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var numericValue))
+            {
+                throw new InvalidOperationException("All values in the target column must be numeric");
+            }
+
+            if (!groupTotals.ContainsKey(groupValue))
+            {
+                groupOrder.Add(groupValue);
+                groupTotals[groupValue] = 0m;
+            }
+
+            groupTotals[groupValue] += numericValue;
+        }
+
+        using var writer = new StreamWriter(outputStream, leaveOpen: true)
+        {
+            NewLine = Environment.NewLine
+        };
+
+        writer.WriteLine(string.Join(",", new[] { groupColumnName, "sum" }));
+        foreach (var groupValue in groupOrder)
+        {
+            writer.WriteLine(string.Join(",", new[] { groupValue, groupTotals[groupValue].ToString(System.Globalization.CultureInfo.InvariantCulture) }));
+        }
+
         writer.Flush();
     }
 
@@ -483,7 +605,8 @@ public static class SliceApp
             || IsCommand(value, "head")
             || IsCommand(value, "distinct")
             || IsCommand(value, "count")
-            || IsCommand(value, "sum");
+            || IsCommand(value, "sum")
+            || IsCommand(value, "groupby");
     }
 
     private static bool IsCommand(string value, string command)
@@ -636,6 +759,8 @@ public static class SliceApp
         stderr.WriteLine("   or: slice <csv-file> distinct <column1> [column2 ...]");
         stderr.WriteLine("   or: slice <csv-file> count");
         stderr.WriteLine("   or: slice <csv-file> sum <column>");
+        stderr.WriteLine("   or: slice <csv-file> groupby <column> count");
+        stderr.WriteLine("   or: slice <csv-file> groupby <column> sum <column>");
     }
 
     private sealed class CsvTable
@@ -659,7 +784,9 @@ public static class SliceApp
         Head,
         Distinct,
         Count,
-        Sum
+        Sum,
+        GroupByCount,
+        GroupBySum
     }
 
     private readonly record struct PipelineCommand(
@@ -717,6 +844,7 @@ public static class SliceApp
     }
 
     private readonly record struct SortableRow(string[] Values, string SortValue, decimal NumericSortValue, int OriginalIndex);
+
 }
 
 public static class CsvRoundTripper
