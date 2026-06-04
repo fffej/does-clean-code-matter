@@ -2,7 +2,7 @@ namespace Slice;
 
 public sealed class SliceApplication
 {
-    private const string UsageMessage = "Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc] | head <count> | distinct <column> [<column>...] | count | sum <column>";
+    private const string UsageMessage = "Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc] | head <count> | distinct <column> [<column>...] | count | sum <column> | groupby <column> count | groupby <column> sum <column>";
 
     private readonly Stream _output;
     private readonly TextWriter _error;
@@ -39,6 +39,7 @@ public sealed class SliceApplication
             "distinct" => await ExecuteDistinctAsync(input, commandArguments).ConfigureAwait(false),
             "count" => await _csvProcessor.WriteCountAsync(input, _output).ConfigureAwait(false),
             "sum" => await _csvProcessor.WriteSumAsync(input, _output, commandArguments[0]).ConfigureAwait(false),
+            "groupby" => await ExecuteGroupByAsync(input, commandArguments).ConfigureAwait(false),
             _ => UsageMessage
         };
 
@@ -61,6 +62,11 @@ public sealed class SliceApplication
     {
         IReadOnlyList<string> distinctColumns = _csvProcessor.ParseRequestedColumns(columnArguments);
         return _csvProcessor.WriteDistinctRowsAsync(input, _output, distinctColumns);
+    }
+
+    private Task<string?> ExecuteGroupByAsync(Stream input, IReadOnlyList<string> groupByArguments)
+    {
+        return _csvProcessor.WriteGroupedRowsAsync(input, _output, groupByArguments);
     }
 
     private static bool TryParseArguments(
@@ -89,6 +95,7 @@ public sealed class SliceApplication
             "distinct" => commandArguments.Count >= 1,
             "count" => commandArguments.Count == 0,
             "sum" => commandArguments.Count == 1,
+            "groupby" => commandArguments.Count is 2 or 3,
             _ => false
         };
     }

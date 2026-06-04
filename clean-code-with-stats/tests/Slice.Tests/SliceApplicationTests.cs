@@ -281,6 +281,197 @@ public sealed class SliceApplicationTests
     }
 
     [TestMethod]
+    public async Task RunAsync_WithGroupByCountCommand_WritesOneRowPerGroupInFirstSeenOrder()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.csv");
+        var input = string.Join("\r\n", [
+            "name,city,amount",
+            "Ada,London,12.5",
+            "Bob,Paris,7.25",
+            "Carol,London,10",
+            "Dave,Berlin,3",
+            "Eve,Paris,2.75",
+            string.Empty
+        ]);
+        var expected = string.Join("\r\n", [
+            "London,2",
+            "Paris,2",
+            "Berlin,1",
+            string.Empty
+        ]);
+        var inputBytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(input);
+        var expectedBytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(expected);
+
+        try
+        {
+            await File.WriteAllBytesAsync(tempFile, inputBytes);
+
+            await using var output = new MemoryStream();
+            var app = new SliceApplication(output, TextWriter.Null);
+
+            var exitCode = await app.RunAsync([tempFile, "groupby", "city", "count"]);
+
+            Assert.AreEqual(0, exitCode);
+            CollectionAssert.AreEqual(expectedBytes, output.ToArray());
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    [TestMethod]
+    public async Task RunAsync_WithGroupBySumCommand_WritesTheGroupedTotals()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.csv");
+        var input = string.Join("\r\n", [
+            "name,city,amount",
+            "Ada,London,12.5",
+            "Bob,Paris,7.25",
+            "Carol,London,10",
+            "Dave,Berlin,3",
+            "Eve,Paris,2.75",
+            string.Empty
+        ]);
+        var expected = string.Join("\r\n", [
+            "London,22.5",
+            "Paris,10",
+            "Berlin,3",
+            string.Empty
+        ]);
+        var inputBytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(input);
+        var expectedBytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(expected);
+
+        try
+        {
+            await File.WriteAllBytesAsync(tempFile, inputBytes);
+
+            await using var output = new MemoryStream();
+            var app = new SliceApplication(output, TextWriter.Null);
+
+            var exitCode = await app.RunAsync([tempFile, "groupby", "city", "sum", "amount"]);
+
+            Assert.AreEqual(0, exitCode);
+            CollectionAssert.AreEqual(expectedBytes, output.ToArray());
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    [TestMethod]
+    public async Task RunAsync_WithGroupBySumCommandAndMissingGroupColumn_ReturnsAnError()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.csv");
+        var input = string.Join("\r\n", [
+            "name,city,amount",
+            "Ada,London,12.5",
+            "Bob,Paris,7.25",
+            string.Empty
+        ]);
+        var inputBytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(input);
+
+        try
+        {
+            await File.WriteAllBytesAsync(tempFile, inputBytes);
+
+            await using var output = new MemoryStream();
+            var error = new StringWriter();
+            var app = new SliceApplication(output, error);
+
+            var exitCode = await app.RunAsync([tempFile, "groupby", "country", "sum", "amount"]);
+
+            Assert.AreEqual(1, exitCode);
+            StringAssert.Contains(error.ToString(), "Column not found: country");
+            Assert.AreEqual(0, output.Length);
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    [TestMethod]
+    public async Task RunAsync_WithGroupBySumCommandAndMissingAggregateColumn_ReturnsAnError()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.csv");
+        var input = string.Join("\r\n", [
+            "name,city,amount",
+            "Ada,London,12.5",
+            "Bob,Paris,7.25",
+            string.Empty
+        ]);
+        var inputBytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(input);
+
+        try
+        {
+            await File.WriteAllBytesAsync(tempFile, inputBytes);
+
+            await using var output = new MemoryStream();
+            var error = new StringWriter();
+            var app = new SliceApplication(output, error);
+
+            var exitCode = await app.RunAsync([tempFile, "groupby", "city", "sum", "total"]);
+
+            Assert.AreEqual(1, exitCode);
+            StringAssert.Contains(error.ToString(), "Column not found: total");
+            Assert.AreEqual(0, output.Length);
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    [TestMethod]
+    public async Task RunAsync_WithGroupBySumCommandAndNonNumericValue_ReturnsAnError()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.csv");
+        var input = string.Join("\r\n", [
+            "name,city,amount",
+            "Ada,London,12.5",
+            "Bob,Paris,not-a-number",
+            string.Empty
+        ]);
+        var inputBytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(input);
+
+        try
+        {
+            await File.WriteAllBytesAsync(tempFile, inputBytes);
+
+            await using var output = new MemoryStream();
+            var error = new StringWriter();
+            var app = new SliceApplication(output, error);
+
+            var exitCode = await app.RunAsync([tempFile, "groupby", "city", "sum", "amount"]);
+
+            Assert.AreEqual(1, exitCode);
+            StringAssert.Contains(error.ToString(), "Column must contain only numeric values: amount");
+            Assert.AreEqual(0, output.Length);
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    [TestMethod]
     public async Task RunAsync_WithMissingFile_ReturnsAnError()
     {
         await using var output = new MemoryStream();
@@ -304,7 +495,7 @@ public sealed class SliceApplicationTests
         var exitCode = await app.RunAsync([]);
 
         Assert.AreEqual(1, exitCode);
-        StringAssert.Contains(error.ToString(), "Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc] | head <count> | distinct <column> [<column>...] | count | sum <column>");
+        StringAssert.Contains(error.ToString(), "Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc] | head <count> | distinct <column> [<column>...] | count | sum <column> | groupby <column> count | groupby <column> sum <column>");
         Assert.AreEqual(0, output.Length);
     }
 

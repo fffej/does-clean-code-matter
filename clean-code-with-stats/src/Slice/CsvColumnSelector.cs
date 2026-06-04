@@ -352,7 +352,89 @@ internal sealed class CsvTableProcessor
         }
 
         await using var writer = CreateWriter(output);
-        await writer.WriteLineAsync(total.ToString(CultureInfo.InvariantCulture)).ConfigureAwait(false);
+        await writer.WriteLineAsync(FormatDecimal(total)).ConfigureAwait(false);
+        await writer.FlushAsync().ConfigureAwait(false);
+        await output.FlushAsync().ConfigureAwait(false);
+        return null;
+    }
+
+    public async Task<string?> WriteGroupedRowsAsync(
+        Stream input,
+        Stream output,
+        IReadOnlyList<string> groupByArguments)
+    {
+        if (!GroupByRequest.TryParse(groupByArguments, out var request, out var errorMessage))
+        {
+            return errorMessage;
+        }
+
+        using var parser = CreateParser(input);
+
+        var headers = parser.ReadFields();
+        if (headers is null)
+        {
+            return "CSV file is empty.";
+        }
+
+        if (!TryResolveColumnIndex(headers, request.GroupColumnName, out var groupColumnIndex))
+        {
+            return $"Column not found: {request.GroupColumnName}";
+        }
+
+        var aggregateColumnIndex = -1;
+        if (request.AggregateKind is GroupByAggregateKind.Sum)
+        {
+            if (!TryResolveColumnIndex(headers, request.AggregateColumnName!, out aggregateColumnIndex))
+            {
+                return $"Column not found: {request.AggregateColumnName}";
+            }
+        }
+
+        var groups = new List<GroupAggregation>();
+        var groupLookup = new Dictionary<string, GroupAggregation>(StringComparer.Ordinal);
+
+        while (!parser.EndOfData)
+        {
+            var fields = parser.ReadFields();
+            if (fields is null)
+            {
+                continue;
+            }
+
+            var groupValue = groupColumnIndex < fields.Length ? fields[groupColumnIndex] : string.Empty;
+            if (!groupLookup.TryGetValue(groupValue, out var aggregation))
+            {
+                aggregation = new GroupAggregation(groupValue);
+                groupLookup.Add(groupValue, aggregation);
+                groups.Add(aggregation);
+            }
+
+            aggregation.RowCount++;
+
+            if (request.AggregateKind is not GroupByAggregateKind.Sum)
+            {
+                continue;
+            }
+
+            var candidateValue = aggregateColumnIndex < fields.Length ? fields[aggregateColumnIndex] : string.Empty;
+            if (!decimal.TryParse(candidateValue, NumberStyles.Number, CultureInfo.InvariantCulture, out var numericValue))
+            {
+                return $"Column must contain only numeric values: {request.AggregateColumnName}";
+            }
+
+            aggregation.Sum += numericValue;
+        }
+
+        await using var writer = CreateWriter(output);
+        foreach (var group in groups)
+        {
+            var aggregateValue = request.AggregateKind is GroupByAggregateKind.Count
+                ? group.RowCount.ToString(CultureInfo.InvariantCulture)
+                : FormatDecimal(group.Sum);
+
+            await writer.WriteLineAsync(BuildCsvRow([group.GroupValue, aggregateValue])).ConfigureAwait(false);
+        }
+
         await writer.FlushAsync().ConfigureAwait(false);
         await output.FlushAsync().ConfigureAwait(false);
         return null;
@@ -414,6 +496,24 @@ internal sealed class CsvTableProcessor
 
         errorMessage = null;
         return true;
+    }
+
+    private static bool TryResolveColumnIndex(
+        IReadOnlyList<string> headers,
+        string requestedColumn,
+        out int index)
+    {
+        for (var headerIndex = 0; headerIndex < headers.Count; headerIndex++)
+        {
+            if (string.Equals(headers[headerIndex], requestedColumn, StringComparison.OrdinalIgnoreCase))
+            {
+                index = headerIndex;
+                return true;
+            }
+        }
+
+        index = -1;
+        return false;
     }
 
     private static string[] BuildDistinctKey(IReadOnlyList<string> fields, IReadOnlyList<int> selectedIndexes)
@@ -528,9 +628,21 @@ internal sealed class CsvTableProcessor
         return $"\"{escaped}\"";
     }
 
+    private static string FormatDecimal(decimal value)
+    {
+        return value.ToString("0.#############################", CultureInfo.InvariantCulture);
+    }
+
     private sealed record CsvRow(IReadOnlyList<string> Fields, SortValue SortValue);
 
     private sealed record SortValue(bool IsNumeric, decimal NumericValue, string TextValue);
+
+    private sealed record GroupAggregation(string GroupValue)
+    {
+        public int RowCount { get; set; }
+
+        public decimal Sum { get; set; }
+    }
 
     private sealed class StringArraySequenceComparer : IEqualityComparer<string[]>
     {
@@ -573,6 +685,63 @@ internal sealed class CsvTableProcessor
     {
         Ascending,
         Descending
+    }
+
+    private enum GroupByAggregateKind
+    {
+        Count,
+        Sum
+    }
+
+    private sealed record GroupByRequest(string GroupColumnName, GroupByAggregateKind AggregateKind, string? AggregateColumnName)
+    {
+        public static bool TryParse(
+            IReadOnlyList<string> arguments,
+            out GroupByRequest request,
+            out string errorMessage)
+        {
+            if (arguments.Count is not 2 and not 3)
+            {
+                request = default!;
+                errorMessage = "Invalid groupby arguments.";
+                return false;
+            }
+
+            var groupColumnName = arguments[0];
+            var aggregateName = arguments[1];
+
+            if (string.Equals(aggregateName, "count", StringComparison.OrdinalIgnoreCase))
+            {
+                if (arguments.Count != 2)
+                {
+                    request = default!;
+                    errorMessage = "Invalid groupby arguments.";
+                    return false;
+                }
+
+                request = new GroupByRequest(groupColumnName, GroupByAggregateKind.Count, null);
+                errorMessage = string.Empty;
+                return true;
+            }
+
+            if (string.Equals(aggregateName, "sum", StringComparison.OrdinalIgnoreCase))
+            {
+                if (arguments.Count != 3)
+                {
+                    request = default!;
+                    errorMessage = "Invalid groupby arguments.";
+                    return false;
+                }
+
+                request = new GroupByRequest(groupColumnName, GroupByAggregateKind.Sum, arguments[2]);
+                errorMessage = string.Empty;
+                return true;
+            }
+
+            request = default!;
+            errorMessage = $"Invalid groupby aggregate: {aggregateName}";
+            return false;
+        }
     }
 
     private sealed record CsvWhereClause(string ColumnName, ComparisonOperator Operator, string LiteralValue)
