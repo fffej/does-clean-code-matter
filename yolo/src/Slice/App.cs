@@ -6,15 +6,16 @@ public static class App
     {
         _ = input;
 
-        if (args.Length != 3)
+        if (args.Length < 3 || args.Length > 4)
         {
-            error.WriteLine("Usage: slice <csv-file> select <columns> | where <expression>");
+            error.WriteLine("Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc]");
             return 1;
         }
 
         string path = args[0];
         string command = args[1];
         string argument = args[2];
+        string? optionalArgument = args.Length == 4 ? args[3] : null;
 
         if (!File.Exists(path))
         {
@@ -88,7 +89,25 @@ public static class App
             return 0;
         }
 
-        error.WriteLine("Usage: slice <csv-file> select <columns> | where <expression>");
+        if (string.Equals(command, "sort", StringComparison.Ordinal))
+        {
+            if (!TryParseSortDirection(optionalArgument, out bool descending, out string sortError))
+            {
+                error.WriteLine(sortError);
+                return 1;
+            }
+
+            if (!TrySortDocument(document, argument, descending, out IReadOnlyList<IReadOnlyList<string>> sortedRows, out string sortColumnError))
+            {
+                error.WriteLine(sortColumnError);
+                return 1;
+            }
+
+            CsvDocument.WriteDocument(document, sortedRows, output);
+            return 0;
+        }
+
+        error.WriteLine("Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc]");
         return 1;
     }
 
@@ -137,6 +156,94 @@ public static class App
         }
 
         return result;
+    }
+
+    private static bool TrySortDocument(
+        CsvDocument document,
+        string columnName,
+        bool descending,
+        out IReadOnlyList<IReadOnlyList<string>> sortedRows,
+        out string error)
+    {
+        IReadOnlyDictionary<string, int> columnLookup = BuildColumnLookup(document.Header);
+        if (!columnLookup.TryGetValue(columnName, out int columnIndex))
+        {
+            sortedRows = Array.Empty<IReadOnlyList<string>>();
+            error = $"Column not found: {columnName}";
+            return false;
+        }
+
+        bool sortAsNumeric = true;
+        for (int i = 0; i < document.Rows.Count; i++)
+        {
+            string value = columnIndex < document.Rows[i].Count ? document.Rows[i][columnIndex] : string.Empty;
+            if (!decimal.TryParse(
+                    value,
+                    System.Globalization.NumberStyles.Number,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out _))
+            {
+                sortAsNumeric = false;
+                break;
+            }
+        }
+
+        IEnumerable<IReadOnlyList<string>> orderedRows;
+        if (sortAsNumeric)
+        {
+            orderedRows = descending
+                ? document.Rows.OrderByDescending(row => GetNumericSortValue(row, columnIndex))
+                : document.Rows.OrderBy(row => GetNumericSortValue(row, columnIndex));
+        }
+        else
+        {
+            orderedRows = descending
+                ? document.Rows.OrderByDescending(row => GetTextSortValue(row, columnIndex), StringComparer.Ordinal)
+                : document.Rows.OrderBy(row => GetTextSortValue(row, columnIndex), StringComparer.Ordinal);
+        }
+
+        sortedRows = orderedRows.ToArray();
+        error = string.Empty;
+        return true;
+    }
+
+    private static bool TryParseSortDirection(string? directionArgument, out bool descending, out string error)
+    {
+        if (directionArgument is null)
+        {
+            descending = false;
+            error = string.Empty;
+            return true;
+        }
+
+        if (string.Equals(directionArgument, "asc", StringComparison.Ordinal))
+        {
+            descending = false;
+            error = string.Empty;
+            return true;
+        }
+
+        if (string.Equals(directionArgument, "desc", StringComparison.Ordinal))
+        {
+            descending = true;
+            error = string.Empty;
+            return true;
+        }
+
+        descending = false;
+        error = "Invalid sort direction.";
+        return false;
+    }
+
+    private static decimal GetNumericSortValue(IReadOnlyList<string> row, int columnIndex)
+    {
+        string value = GetTextSortValue(row, columnIndex);
+        return decimal.Parse(value, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static string GetTextSortValue(IReadOnlyList<string> row, int columnIndex)
+    {
+        return columnIndex < row.Count ? row[columnIndex] : string.Empty;
     }
 
     private static bool TryParseWhereExpression(
