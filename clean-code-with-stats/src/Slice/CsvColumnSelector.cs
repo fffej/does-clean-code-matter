@@ -285,6 +285,79 @@ internal sealed class CsvTableProcessor
         return null;
     }
 
+    public async Task<string?> WriteCountAsync(Stream input, Stream output)
+    {
+        using var parser = CreateParser(input);
+
+        var headers = parser.ReadFields();
+        if (headers is null)
+        {
+            return "CSV file is empty.";
+        }
+
+        var rowCount = 0;
+        while (!parser.EndOfData)
+        {
+            var fields = parser.ReadFields();
+            if (fields is null)
+            {
+                continue;
+            }
+
+            rowCount++;
+        }
+
+        await using var writer = CreateWriter(output);
+        await writer.WriteLineAsync(rowCount.ToString(CultureInfo.InvariantCulture)).ConfigureAwait(false);
+        await writer.FlushAsync().ConfigureAwait(false);
+        await output.FlushAsync().ConfigureAwait(false);
+        return null;
+    }
+
+    public async Task<string?> WriteSumAsync(Stream input, Stream output, string columnName)
+    {
+        using var parser = CreateParser(input);
+
+        var headers = parser.ReadFields();
+        if (headers is null)
+        {
+            return "CSV file is empty.";
+        }
+
+        var columnIndex = Array.FindIndex(
+            headers,
+            header => string.Equals(header, columnName, StringComparison.OrdinalIgnoreCase));
+
+        if (columnIndex < 0)
+        {
+            return $"Column not found: {columnName}";
+        }
+
+        decimal total = 0m;
+        while (!parser.EndOfData)
+        {
+            var fields = parser.ReadFields();
+            if (fields is null)
+            {
+                continue;
+            }
+
+            var candidateValue = columnIndex < fields.Length ? fields[columnIndex] : string.Empty;
+            if (!decimal.TryParse(candidateValue, NumberStyles.Number, CultureInfo.InvariantCulture, out var numericValue))
+            {
+                return $"Column must contain only numeric values: {columnName}";
+            }
+
+            total += numericValue;
+        }
+
+        await using var writer = CreateWriter(output);
+        await writer.WriteLineAsync(total.ToString(CultureInfo.InvariantCulture)).ConfigureAwait(false);
+        await writer.FlushAsync().ConfigureAwait(false);
+        await output.FlushAsync().ConfigureAwait(false);
+        return null;
+    }
+
     private static string BuildCsvRow(IReadOnlyList<string> fields, IReadOnlyList<int> selectedIndexes)
     {
         var selectedFields = new string[selectedIndexes.Count];

@@ -2,7 +2,7 @@ namespace Slice;
 
 public sealed class SliceApplication
 {
-    private const string UsageMessage = "Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc] | head <count> | distinct <column> [<column>...]";
+    private const string UsageMessage = "Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc] | head <count> | distinct <column> [<column>...] | count | sum <column>";
 
     private readonly Stream _output;
     private readonly TextWriter _error;
@@ -37,6 +37,8 @@ public sealed class SliceApplication
             "sort" => await _csvProcessor.WriteSortedRowsAsync(input, _output, commandArguments[0], commandArguments.Count > 1 ? commandArguments[1] : null).ConfigureAwait(false),
             "head" => await _csvProcessor.WriteHeadRowsAsync(input, _output, commandArguments[0]).ConfigureAwait(false),
             "distinct" => await ExecuteDistinctAsync(input, commandArguments).ConfigureAwait(false),
+            "count" => await _csvProcessor.WriteCountAsync(input, _output).ConfigureAwait(false),
+            "sum" => await _csvProcessor.WriteSumAsync(input, _output, commandArguments[0]).ConfigureAwait(false),
             _ => UsageMessage
         };
 
@@ -71,7 +73,7 @@ public sealed class SliceApplication
         command = string.Empty;
         commandArguments = Array.Empty<string>();
 
-        if (args.Count < 3)
+        if (args.Count < 2)
         {
             return false;
         }
@@ -85,6 +87,8 @@ public sealed class SliceApplication
             "select" or "where" or "head" => commandArguments.Count == 1,
             "sort" => commandArguments.Count is 1 or 2,
             "distinct" => commandArguments.Count >= 1,
+            "count" => commandArguments.Count == 0,
+            "sum" => commandArguments.Count == 1,
             _ => false
         };
     }
