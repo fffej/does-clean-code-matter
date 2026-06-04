@@ -1,9 +1,13 @@
+using System.Buffers;
+using System.Text;
+using System.Text.Json;
+
 namespace Slice;
 
 public static class App
 {
     private const string Usage =
-        "Usage: slice <csv-file> <command> [args...]";
+        "Usage: slice <csv-file> [--format csv|json|table] <command> [args...]";
 
     public static int Run(string[] args, TextReader input, TextWriter output, TextWriter error)
     {
@@ -24,6 +28,11 @@ public static class App
         }
 
         string csv = File.ReadAllText(path);
+        if (!TryExtractOutputFormat(args, out OutputFormat outputFormat, out string[] commandArgs, out string formatError))
+        {
+            error.WriteLine(formatError);
+            return 1;
+        }
 
         if (!CsvDocument.TryParse(csv, out CsvDocument? parsedDocument, out string parseError))
         {
@@ -40,21 +49,27 @@ public static class App
         }
 
         CsvDocument currentDocument = document;
-        int argumentIndex = 1;
-
-        while (argumentIndex < args.Length)
+        if (commandArgs.Length == 0)
         {
-            string command = args[argumentIndex++];
+            error.WriteLine(Usage);
+            return 1;
+        }
+
+        int argumentIndex = 0;
+
+        while (argumentIndex < commandArgs.Length)
+        {
+            string command = commandArgs[argumentIndex++];
 
             if (string.Equals(command, "select", StringComparison.Ordinal))
             {
-                if (argumentIndex >= args.Length)
+                if (argumentIndex >= commandArgs.Length)
                 {
                     error.WriteLine(Usage);
                     return 1;
                 }
 
-                string argument = args[argumentIndex++];
+                string argument = commandArgs[argumentIndex++];
                 string[] requestedColumns = argument
                     .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
@@ -84,13 +99,13 @@ public static class App
 
             if (string.Equals(command, "where", StringComparison.Ordinal))
             {
-                if (argumentIndex >= args.Length)
+                if (argumentIndex >= commandArgs.Length)
                 {
                     error.WriteLine(Usage);
                     return 1;
                 }
 
-                string argument = args[argumentIndex++];
+                string argument = commandArgs[argumentIndex++];
                 if (!TryParseWhereExpression(argument, out string columnName, out ComparisonOperator comparisonOperator, out string literalValue, out string whereError))
                 {
                     error.WriteLine(whereError);
@@ -124,15 +139,15 @@ public static class App
 
             if (string.Equals(command, "sort", StringComparison.Ordinal))
             {
-                if (argumentIndex >= args.Length)
+                if (argumentIndex >= commandArgs.Length)
                 {
                     error.WriteLine(Usage);
                     return 1;
                 }
 
-                string argument = args[argumentIndex++];
-                string? optionalArgument = argumentIndex < args.Length && IsSortDirection(args[argumentIndex])
-                    ? args[argumentIndex]
+                string argument = commandArgs[argumentIndex++];
+                string? optionalArgument = argumentIndex < commandArgs.Length && IsSortDirection(commandArgs[argumentIndex])
+                    ? commandArgs[argumentIndex]
                     : null;
                 if (!TryParseSortDirection(optionalArgument, out bool descending, out string sortError))
                 {
@@ -161,13 +176,13 @@ public static class App
 
             if (string.Equals(command, "head", StringComparison.Ordinal))
             {
-                if (argumentIndex >= args.Length)
+                if (argumentIndex >= commandArgs.Length)
                 {
                     error.WriteLine(Usage);
                     return 1;
                 }
 
-                string argument = args[argumentIndex++];
+                string argument = commandArgs[argumentIndex++];
                 if (!int.TryParse(argument, out int rowCount) || rowCount <= 0)
                 {
                     error.WriteLine("Invalid row count.");
@@ -186,19 +201,19 @@ public static class App
 
             if (string.Equals(command, "distinct", StringComparison.Ordinal))
             {
-                if (argumentIndex >= args.Length)
+                if (argumentIndex >= commandArgs.Length)
                 {
                     error.WriteLine(Usage);
                     return 1;
                 }
 
                 int distinctArgumentStart = argumentIndex;
-                while (argumentIndex < args.Length && !IsCommandToken(args[argumentIndex]))
+                while (argumentIndex < commandArgs.Length && !IsCommandToken(commandArgs[argumentIndex]))
                 {
                     argumentIndex++;
                 }
 
-                string[] requestedColumns = args[distinctArgumentStart..argumentIndex];
+                string[] requestedColumns = commandArgs[distinctArgumentStart..argumentIndex];
                 if (requestedColumns.Length == 0)
                 {
                     error.WriteLine("No columns selected.");
@@ -233,20 +248,20 @@ public static class App
 
             if (string.Equals(command, "groupby", StringComparison.Ordinal))
             {
-                if (argumentIndex >= args.Length)
+                if (argumentIndex >= commandArgs.Length)
                 {
                     error.WriteLine(Usage);
                     return 1;
                 }
 
-                string groupColumnName = args[argumentIndex++];
-                if (argumentIndex >= args.Length)
+                string groupColumnName = commandArgs[argumentIndex++];
+                if (argumentIndex >= commandArgs.Length)
                 {
                     error.WriteLine(Usage);
                     return 1;
                 }
 
-                string aggregateName = args[argumentIndex++];
+                string aggregateName = commandArgs[argumentIndex++];
                 if (string.Equals(aggregateName, "count", StringComparison.Ordinal))
                 {
                     if (!TryGroupDocument(
@@ -267,13 +282,13 @@ public static class App
 
                 if (string.Equals(aggregateName, "sum", StringComparison.Ordinal))
                 {
-                    if (argumentIndex >= args.Length)
+                    if (argumentIndex >= commandArgs.Length)
                     {
                         error.WriteLine(Usage);
                         return 1;
                     }
 
-                    string aggregateColumnName = args[argumentIndex++];
+                    string aggregateColumnName = commandArgs[argumentIndex++];
                     if (!TryGroupDocument(
                             currentDocument,
                             groupColumnName,
@@ -296,7 +311,7 @@ public static class App
 
             if (string.Equals(command, "count", StringComparison.Ordinal))
             {
-                if (argumentIndex != args.Length)
+                if (argumentIndex != commandArgs.Length)
                 {
                     error.WriteLine(Usage);
                     return 1;
@@ -308,13 +323,13 @@ public static class App
 
             if (string.Equals(command, "sum", StringComparison.Ordinal))
             {
-                if (argumentIndex >= args.Length || argumentIndex != args.Length - 1)
+                if (argumentIndex >= commandArgs.Length || argumentIndex != commandArgs.Length - 1)
                 {
                     error.WriteLine(Usage);
                     return 1;
                 }
 
-                string columnName = args[argumentIndex++];
+                string columnName = commandArgs[argumentIndex++];
                 IReadOnlyDictionary<string, int> columnLookup = BuildColumnLookup(currentDocument.Header);
                 if (!columnLookup.TryGetValue(columnName, out int columnIndex))
                 {
@@ -347,8 +362,208 @@ public static class App
             return 1;
         }
 
-        CsvDocument.WriteDocument(currentDocument, currentDocument.Rows, output);
+        WriteDocument(currentDocument, currentDocument.Rows, output, outputFormat);
         return 0;
+    }
+
+    private static bool TryExtractOutputFormat(
+        string[] args,
+        out OutputFormat outputFormat,
+        out string[] commandArgs,
+        out string error)
+    {
+        outputFormat = OutputFormat.Csv;
+        error = string.Empty;
+
+        if (args.Length < 2)
+        {
+            commandArgs = Array.Empty<string>();
+            error = Usage;
+            return false;
+        }
+
+        var filteredArgs = new List<string>(args.Length - 1);
+        filteredArgs.Add(args[0]);
+
+        for (int i = 1; i < args.Length; i++)
+        {
+            if (!string.Equals(args[i], "--format", StringComparison.Ordinal))
+            {
+                filteredArgs.Add(args[i]);
+                continue;
+            }
+
+            if (i + 1 >= args.Length)
+            {
+                commandArgs = Array.Empty<string>();
+                error = Usage;
+                return false;
+            }
+
+            if (!TryParseOutputFormat(args[i + 1], out outputFormat))
+            {
+                commandArgs = Array.Empty<string>();
+                error = $"Invalid format: {args[i + 1]}";
+                return false;
+            }
+
+            i++;
+        }
+
+        commandArgs = filteredArgs.Skip(1).ToArray();
+        return true;
+    }
+
+    private static bool TryParseOutputFormat(string value, out OutputFormat outputFormat)
+    {
+        if (string.Equals(value, "csv", StringComparison.Ordinal))
+        {
+            outputFormat = OutputFormat.Csv;
+            return true;
+        }
+
+        if (string.Equals(value, "json", StringComparison.Ordinal))
+        {
+            outputFormat = OutputFormat.Json;
+            return true;
+        }
+
+        if (string.Equals(value, "table", StringComparison.Ordinal))
+        {
+            outputFormat = OutputFormat.Table;
+            return true;
+        }
+
+        outputFormat = OutputFormat.Csv;
+        return false;
+    }
+
+    private static void WriteDocument(
+        CsvDocument document,
+        IReadOnlyList<IReadOnlyList<string>> rows,
+        TextWriter output,
+        OutputFormat outputFormat)
+    {
+        switch (outputFormat)
+        {
+            case OutputFormat.Json:
+                WriteJsonDocument(document, rows, output);
+                return;
+            case OutputFormat.Table:
+                WriteTableDocument(document, rows, output);
+                return;
+            case OutputFormat.Csv:
+                CsvDocument.WriteDocument(document, rows, output);
+                return;
+            default:
+                throw new InvalidOperationException("Unknown output format.");
+        }
+    }
+
+    private static void WriteJsonDocument(CsvDocument document, IReadOnlyList<IReadOnlyList<string>> rows, TextWriter output)
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+        using (Utf8JsonWriter writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartArray();
+
+            foreach (IReadOnlyList<string> row in rows)
+            {
+                writer.WriteStartObject();
+
+                for (int i = 0; i < document.Header.Count; i++)
+                {
+                    string value = i < row.Count ? row[i] : string.Empty;
+                    writer.WriteString(document.Header[i], value);
+                }
+
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndArray();
+        }
+
+        output.Write(Encoding.UTF8.GetString(buffer.WrittenSpan));
+        if (document.EndsWithLineEnding)
+        {
+            output.Write(document.LineEnding);
+        }
+    }
+
+    private static void WriteTableDocument(CsvDocument document, IReadOnlyList<IReadOnlyList<string>> rows, TextWriter output)
+    {
+        int columnCount = document.Header.Count;
+        int[] widths = new int[columnCount];
+
+        for (int i = 0; i < columnCount; i++)
+        {
+            widths[i] = document.Header[i].Length;
+        }
+
+        foreach (IReadOnlyList<string> row in rows)
+        {
+            for (int i = 0; i < columnCount; i++)
+            {
+                string value = i < row.Count ? row[i] : string.Empty;
+                widths[i] = Math.Max(widths[i], value.Length);
+            }
+        }
+
+        string border = BuildBorder(widths);
+
+        output.Write(border);
+        output.Write(document.LineEnding);
+        WriteTableRow(output, document.Header, widths, document.LineEnding);
+        output.Write(border);
+
+        if (rows.Count > 0)
+        {
+            output.Write(document.LineEnding);
+            for (int i = 0; i < rows.Count; i++)
+            {
+                WriteTableRow(output, rows[i], widths, document.LineEnding);
+            }
+
+            output.Write(border);
+        }
+
+        if (document.EndsWithLineEnding)
+        {
+            output.Write(document.LineEnding);
+        }
+    }
+
+    private static string BuildBorder(IReadOnlyList<int> widths)
+    {
+        var builder = new StringBuilder();
+        builder.Append('+');
+        for (int i = 0; i < widths.Count; i++)
+        {
+            if (i > 0)
+            {
+                builder.Append('+');
+            }
+
+            builder.Append(new string('-', widths[i] + 2));
+        }
+
+        builder.Append('+');
+        return builder.ToString();
+    }
+
+    private static void WriteTableRow(TextWriter output, IReadOnlyList<string> row, IReadOnlyList<int> widths, string lineEnding)
+    {
+        output.Write('|');
+        for (int i = 0; i < widths.Count; i++)
+        {
+            string value = i < row.Count ? row[i] : string.Empty;
+            output.Write(' ');
+            output.Write(value.PadRight(widths[i]));
+            output.Write(' ');
+            output.Write('|');
+        }
+
+        output.Write(lineEnding);
     }
 
     private static bool TryBuildSelection(
@@ -672,6 +887,13 @@ public static class App
     {
         output.Write(value);
         output.Write(lineEnding);
+    }
+
+    private enum OutputFormat
+    {
+        Csv,
+        Json,
+        Table,
     }
 
     private static bool MatchesComparison(string leftValue, string rightValue, ComparisonOperator comparisonOperator)

@@ -8,6 +8,8 @@ static class Program
         try
         {
             RunSelectProjectionTest();
+            RunJsonFormatProjectionTest();
+            RunTableFormatProjectionTest();
             RunMissingColumnTest();
             RunWhereNumericFilterTest();
             RunWhereTextInequalityTest();
@@ -21,6 +23,7 @@ static class Program
             RunDistinctMultipleColumnsCompositeKeyTest();
             RunDistinctMissingColumnTest();
             RunCountAllRowsTest();
+            RunCountJsonFormatTest();
             RunCountAfterFilterAndLimitTest();
             RunSumAmountColumnTest();
             RunSumMissingColumnTest();
@@ -60,6 +63,73 @@ static class Program
             AssertEqual(0, exitCode, "exit code");
             AssertEqual(expected, output.ToString(), "stdout");
             AssertEqual(string.Empty, error.ToString(), "stderr");
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    private static void RunJsonFormatProjectionTest()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"slice-json-format-{Guid.NewGuid():N}.csv");
+        var inputCsv = "name,age,city\r\n" +
+                       "\"Ada\",31,\"London\"\r\n" +
+                       "\"Grace\",36,\"New York\"\r\n";
+        var expected = "[{\"age\":\"31\",\"name\":\"Ada\"},{\"age\":\"36\",\"name\":\"Grace\"}]\r\n";
+
+        try
+        {
+            File.WriteAllText(tempFile, inputCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            using var input = new StringReader(string.Empty);
+            using var output = new StringWriter();
+            using var error = new StringWriter();
+
+            var exitCode = App.Run([tempFile, "--format", "json", "select", "age,name"], input, output, error);
+
+            AssertEqual(0, exitCode, "json format exit code");
+            AssertEqual(expected, output.ToString(), "json format stdout");
+            AssertEqual(string.Empty, error.ToString(), "json format stderr");
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    private static void RunTableFormatProjectionTest()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"slice-table-format-{Guid.NewGuid():N}.csv");
+        var inputCsv = "name,age,city\r\n" +
+                       "\"Ada\",31,\"London\"\r\n" +
+                       "\"Grace\",36,\"New York\"\r\n";
+        var expected = "+-----+-------+\r\n" +
+                       "| age | name  |\r\n" +
+                       "+-----+-------+\r\n" +
+                       "| 31  | Ada   |\r\n" +
+                       "| 36  | Grace |\r\n" +
+                       "+-----+-------+\r\n";
+
+        try
+        {
+            File.WriteAllText(tempFile, inputCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            using var input = new StringReader(string.Empty);
+            using var output = new StringWriter();
+            using var error = new StringWriter();
+
+            var exitCode = App.Run([tempFile, "--format", "table", "select", "age,name"], input, output, error);
+
+            AssertEqual(0, exitCode, "table format exit code");
+            AssertEqual(expected, output.ToString(), "table format stdout");
+            AssertEqual(string.Empty, error.ToString(), "table format stderr");
         }
         finally
         {
@@ -505,6 +575,38 @@ static class Program
             AssertEqual(0, exitCode, "count exit code");
             AssertEqual(expected, output.ToString(), "count stdout");
             AssertEqual(string.Empty, error.ToString(), "count stderr");
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    private static void RunCountJsonFormatTest()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"slice-count-json-{Guid.NewGuid():N}.csv");
+        var inputCsv = "name,amount\r\n" +
+                       "Ada,10\r\n" +
+                       "Grace,20\r\n" +
+                       "Linus,30\r\n";
+        var expected = "3\r\n";
+
+        try
+        {
+            File.WriteAllText(tempFile, inputCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            using var input = new StringReader(string.Empty);
+            using var output = new StringWriter();
+            using var error = new StringWriter();
+
+            var exitCode = App.Run([tempFile, "--format", "json", "count"], input, output, error);
+
+            AssertEqual(0, exitCode, "count json format exit code");
+            AssertEqual(expected, output.ToString(), "count json format stdout");
+            AssertEqual(string.Empty, error.ToString(), "count json format stderr");
         }
         finally
         {
