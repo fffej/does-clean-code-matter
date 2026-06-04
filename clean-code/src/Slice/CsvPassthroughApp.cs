@@ -24,6 +24,11 @@ public static class CsvPassthroughApp
             return CsvHeadApp.Run(args[0], args[2], output, error);
         }
 
+        if (args.Length >= 3 && string.Equals(args[1], "distinct", StringComparison.Ordinal))
+        {
+            return CsvDistinctApp.Run(args[0], args[2..], output, error);
+        }
+
         if ((args.Length == 3 || args.Length == 4) && string.Equals(args[1], "sort", StringComparison.Ordinal))
         {
             string sortDirection = args.Length == 4 ? args[3] : string.Empty;
@@ -34,6 +39,7 @@ public static class CsvPassthroughApp
         error.WriteLine("Usage: slice <csv-file> select <column1,column2,...>");
         error.WriteLine("Usage: slice <csv-file> where <column><operator><value>");
         error.WriteLine("Usage: slice <csv-file> head <n>");
+        error.WriteLine("Usage: slice <csv-file> distinct <column1> [<column2> ...]");
         error.WriteLine("Usage: slice <csv-file> sort <column> [asc|desc]");
         return 1;
     }
