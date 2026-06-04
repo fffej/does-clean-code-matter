@@ -29,6 +29,11 @@ public static class CsvPassthroughApp
             return CsvHeadApp.Run(args[0], args[2], output, error);
         }
 
+        if (args.Length >= 4 && string.Equals(args[1], "groupby", StringComparison.Ordinal))
+        {
+            return CsvGroupByApp.Run(args[0], args[2], args[3..], output, error);
+        }
+
         if (args.Length >= 3 && string.Equals(args[1], "distinct", StringComparison.Ordinal))
         {
             return CsvDistinctApp.Run(args[0], args[2..], output, error);
@@ -51,6 +56,8 @@ public static class CsvPassthroughApp
         error.WriteLine("Usage: slice <csv-file> select <column1,column2,...>");
         error.WriteLine("Usage: slice <csv-file> where <column><operator><value>");
         error.WriteLine("Usage: slice <csv-file> head <n>");
+        error.WriteLine("Usage: slice <csv-file> groupby <column> count");
+        error.WriteLine("Usage: slice <csv-file> groupby <column> sum <column>");
         error.WriteLine("Usage: slice <csv-file> distinct <column1> [<column2> ...]");
         error.WriteLine("Usage: slice <csv-file> sort <column> [asc|desc]");
         return 1;
