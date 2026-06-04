@@ -1,118 +1,16 @@
-using System.Globalization;
-
 namespace Slice;
 
 public static class CsvSortApp
 {
     public static QueryResult? Run(string csvPath, string sortColumn, string sortDirection, TextWriter error)
     {
-        if (!TryParseSortArgument(sortColumn, sortDirection, out SortSpecification specification))
-        {
-            error.WriteLine($"Invalid sort expression: {sortColumn} {sortDirection}".TrimEnd());
-            return null;
-        }
-
-        if (!CsvInputReader.TryReadRows(csvPath, error, out List<IReadOnlyList<string>> rows))
+        if (!CsvQueryOperations.TryReadInitialTable(csvPath, error, out QueryResult.Table table))
         {
             return null;
         }
 
-        IReadOnlyList<string> header = rows[0];
-        int columnIndex = CsvHeaderLookup.FindHeaderIndex(header, specification.ColumnName);
-        if (columnIndex < 0)
-        {
-            error.WriteLine($"Column not found: {specification.ColumnName}");
-            return null;
-        }
-
-        List<IReadOnlyList<string>> dataRows = rows.Skip(1).ToList();
-        bool sortAsNumbers = CanSortAsNumbers(dataRows, columnIndex);
-
-        IEnumerable<IReadOnlyList<string>> sortedRows = sortAsNumbers
-            ? SortRowsNumerically(dataRows, columnIndex, specification.Direction)
-            : SortRowsAsText(dataRows, columnIndex, specification.Direction);
-
-        return new QueryResult.Table(header, sortedRows.ToList());
-    }
-
-    private static bool TryParseSortArgument(string sortColumn, string sortDirection, out SortSpecification specification)
-    {
-        if (string.IsNullOrWhiteSpace(sortColumn))
-        {
-            specification = default;
-            return false;
-        }
-
-        SortDirection direction = SortDirection.Ascending;
-        if (!string.IsNullOrWhiteSpace(sortDirection))
-        {
-            string normalizedDirection = sortDirection.Trim().ToLowerInvariant();
-            direction = normalizedDirection switch
-            {
-                "asc" => SortDirection.Ascending,
-                "desc" => SortDirection.Descending,
-                _ => default
-            };
-
-            if (normalizedDirection is not "asc" and not "desc")
-            {
-                specification = default;
-                return false;
-            }
-        }
-
-        specification = new SortSpecification(sortColumn.Trim(), direction);
-        return true;
-    }
-
-    private static bool CanSortAsNumbers(IReadOnlyList<IReadOnlyList<string>> rows, int columnIndex)
-    {
-        foreach (IReadOnlyList<string> row in rows)
-        {
-            string value = GetColumnValue(row, columnIndex);
-            if (!decimal.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out _))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static IEnumerable<IReadOnlyList<string>> SortRowsNumerically(
-        IEnumerable<IReadOnlyList<string>> rows,
-        int columnIndex,
-        SortDirection direction)
-    {
-        IOrderedEnumerable<IReadOnlyList<string>> sorted = direction == SortDirection.Ascending
-            ? rows.OrderBy(row => decimal.Parse(GetColumnValue(row, columnIndex), CultureInfo.InvariantCulture))
-            : rows.OrderByDescending(row => decimal.Parse(GetColumnValue(row, columnIndex), CultureInfo.InvariantCulture));
-
-        return sorted;
-    }
-
-    private static IEnumerable<IReadOnlyList<string>> SortRowsAsText(
-        IEnumerable<IReadOnlyList<string>> rows,
-        int columnIndex,
-        SortDirection direction)
-    {
-        IOrderedEnumerable<IReadOnlyList<string>> sorted = direction == SortDirection.Ascending
-            ? rows.OrderBy(row => GetColumnValue(row, columnIndex), StringComparer.Ordinal)
-            : rows.OrderByDescending(row => GetColumnValue(row, columnIndex), StringComparer.Ordinal);
-
-        return sorted;
-    }
-
-    private static string GetColumnValue(IReadOnlyList<string> row, int columnIndex)
-    {
-        return columnIndex < row.Count ? row[columnIndex] : string.Empty;
-    }
-
-    private readonly record struct SortSpecification(string ColumnName, SortDirection Direction);
-
-    private enum SortDirection
-    {
-        Ascending,
-        Descending
+        return CsvQueryOperations.TryApplySort(table, sortColumn, sortDirection, error, out QueryResult.Table result)
+            ? result
+            : null;
     }
 }

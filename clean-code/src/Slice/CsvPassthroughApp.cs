@@ -9,61 +9,33 @@ public static class CsvPassthroughApp
             return 1;
         }
 
-        QueryResult? result;
-        if (commandArgs.Length == 0)
+        if (!TryParsePipeline(commandArgs, error, out IReadOnlyList<PipelineCommand> commands))
         {
-            if (format == OutputFormat.Csv)
+            return 1;
+        }
+
+        if (commands.Count == 0 && format == OutputFormat.Csv)
+        {
+            return CopyPassthrough(csvPath, output, error);
+        }
+
+        if (!CsvQueryOperations.TryReadInitialTable(csvPath, error, out QueryResult.Table table))
+        {
+            return 1;
+        }
+
+        QueryResult current = table;
+        foreach (PipelineCommand command in commands)
+        {
+            if (!CsvQueryOperations.TryApply(current, command.Name, command.Arguments, error, out QueryResult next))
             {
-                return CopyPassthrough(csvPath, output, error);
+                return 1;
             }
 
-            result = RunPassthrough(csvPath, error);
-        }
-        else if (commandArgs.Length == 1 && string.Equals(commandArgs[0], "count", StringComparison.Ordinal))
-        {
-            result = CsvAggregateApp.RunCount(csvPath, error);
-        }
-        else if (commandArgs.Length == 2 && string.Equals(commandArgs[0], "select", StringComparison.Ordinal))
-        {
-            result = CsvSelectApp.Run(csvPath, commandArgs[1], error);
-        }
-        else if (commandArgs.Length == 2 && string.Equals(commandArgs[0], "where", StringComparison.Ordinal))
-        {
-            result = CsvWhereApp.Run(csvPath, commandArgs[1], error);
-        }
-        else if (commandArgs.Length == 2 && string.Equals(commandArgs[0], "head", StringComparison.Ordinal))
-        {
-            result = CsvHeadApp.Run(csvPath, commandArgs[1], error);
-        }
-        else if (commandArgs.Length >= 3 && string.Equals(commandArgs[0], "groupby", StringComparison.Ordinal))
-        {
-            result = CsvGroupByApp.Run(csvPath, commandArgs[1], commandArgs[2..], error);
-        }
-        else if (commandArgs.Length >= 2 && string.Equals(commandArgs[0], "distinct", StringComparison.Ordinal))
-        {
-            result = CsvDistinctApp.Run(csvPath, commandArgs[1..], error);
-        }
-        else if ((commandArgs.Length == 2 || commandArgs.Length == 3) && string.Equals(commandArgs[0], "sort", StringComparison.Ordinal))
-        {
-            string sortDirection = commandArgs.Length == 3 ? commandArgs[2] : string.Empty;
-            result = CsvSortApp.Run(csvPath, commandArgs[1], sortDirection, error);
-        }
-        else if (commandArgs.Length == 2 && string.Equals(commandArgs[0], "sum", StringComparison.Ordinal))
-        {
-            result = CsvAggregateApp.RunSum(csvPath, commandArgs[1], error);
-        }
-        else
-        {
-            WriteUsage(error);
-            return 1;
+            current = next;
         }
 
-        if (result is null)
-        {
-            return 1;
-        }
-
-        QueryResultRenderer.Write(result, format, output);
+        QueryResultRenderer.Write(current, format, output);
         return 0;
     }
 
@@ -114,18 +86,92 @@ public static class CsvPassthroughApp
         return true;
     }
 
+    private static bool TryParsePipeline(
+        IReadOnlyList<string> commandArgs,
+        TextWriter error,
+        out IReadOnlyList<PipelineCommand> commands)
+    {
+        List<PipelineCommand> parsedCommands = [];
+        List<string> currentCommandArguments = [];
+
+        foreach (string argument in commandArgs)
+        {
+            if (string.Equals(argument, "|", StringComparison.Ordinal))
+            {
+                if (currentCommandArguments.Count == 0)
+                {
+                    error.WriteLine("Invalid pipeline expression.");
+                    commands = [];
+                    return false;
+                }
+
+                if (!TryCreatePipelineCommand(currentCommandArguments, error, out PipelineCommand command))
+                {
+                    commands = [];
+                    return false;
+                }
+
+                parsedCommands.Add(command);
+                currentCommandArguments = [];
+                continue;
+            }
+
+            currentCommandArguments.Add(argument);
+        }
+
+        if (currentCommandArguments.Count > 0)
+        {
+            if (!TryCreatePipelineCommand(currentCommandArguments, error, out PipelineCommand command))
+            {
+                commands = [];
+                return false;
+            }
+
+            parsedCommands.Add(command);
+        }
+        else if (commandArgs.Count > 0)
+        {
+            error.WriteLine("Invalid pipeline expression.");
+            commands = [];
+            return false;
+        }
+
+        commands = parsedCommands;
+        return true;
+    }
+
+    private static bool TryCreatePipelineCommand(
+        IReadOnlyList<string> commandArguments,
+        TextWriter error,
+        out PipelineCommand command)
+    {
+        if (commandArguments.Count == 0)
+        {
+            error.WriteLine("Invalid pipeline expression.");
+            command = default;
+            return false;
+        }
+
+        string commandName = commandArguments[0];
+        string[] arguments = commandArguments.Count > 1 ? commandArguments.Skip(1).ToArray() : [];
+
+        command = new PipelineCommand(commandName, arguments);
+        return true;
+    }
+
     private static void WriteUsage(TextWriter error)
     {
         error.WriteLine("Usage: slice <csv-file> [--format csv|json|table]");
-        error.WriteLine("Usage: slice <csv-file> [--format csv|json|table] count");
-        error.WriteLine("Usage: slice <csv-file> [--format csv|json|table] sum <column>");
-        error.WriteLine("Usage: slice <csv-file> [--format csv|json|table] select <column1,column2,...>");
-        error.WriteLine("Usage: slice <csv-file> [--format csv|json|table] where <column><operator><value>");
-        error.WriteLine("Usage: slice <csv-file> [--format csv|json|table] head <n>");
-        error.WriteLine("Usage: slice <csv-file> [--format csv|json|table] groupby <column> count");
-        error.WriteLine("Usage: slice <csv-file> [--format csv|json|table] groupby <column> sum <column>");
-        error.WriteLine("Usage: slice <csv-file> [--format csv|json|table] distinct <column1> [<column2> ...]");
-        error.WriteLine("Usage: slice <csv-file> [--format csv|json|table] sort <column> [asc|desc]");
+        error.WriteLine("Usage: slice <csv-file> [--format csv|json|table] <command> [args...] [| <command> [args...]]...");
+        error.WriteLine("Commands: count");
+        error.WriteLine("Commands: sum <column>");
+        error.WriteLine("Commands: select <column1,column2,...>");
+        error.WriteLine("Commands: where <column><operator><value>");
+        error.WriteLine("Commands: head <n>");
+        error.WriteLine("Commands: groupby <column> count");
+        error.WriteLine("Commands: groupby <column> sum <column>");
+        error.WriteLine("Commands: distinct <column1> [<column2> ...]");
+        error.WriteLine("Commands: sort <column> [asc|desc]");
     }
 
     private static int CopyPassthrough(string csvPath, Stream output, TextWriter error)
@@ -142,13 +188,5 @@ public static class CsvPassthroughApp
         return 0;
     }
 
-    private static QueryResult? RunPassthrough(string csvPath, TextWriter error)
-    {
-        if (!CsvInputReader.TryReadRows(csvPath, error, out List<IReadOnlyList<string>> rows))
-        {
-            return null;
-        }
-
-        return new QueryResult.Table(rows[0], rows[1..]);
-    }
+    private readonly record struct PipelineCommand(string Name, string[] Arguments);
 }

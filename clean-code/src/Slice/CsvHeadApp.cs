@@ -10,33 +10,18 @@ public static class CsvHeadApp
             return null;
         }
 
-        if (!CsvInputReader.TryReadRows(csvPath, error, out List<IReadOnlyList<string>> rows))
+        if (!CsvQueryOperations.TryReadInitialTable(csvPath, error, out QueryResult.Table table))
         {
             return null;
         }
 
-        return new QueryResult.Table(rows[0], GetRows(rows, rowCount));
+        return CsvQueryOperations.TryApplyHead(table, rowCount, out QueryResult.Table result)
+            ? result
+            : null;
     }
 
     private static bool TryParseRowCount(string rowCountArgument, out int rowCount)
     {
         return int.TryParse(rowCountArgument, out rowCount) && rowCount > 0;
-    }
-
-    private static IReadOnlyList<IReadOnlyList<string>> GetRows(IReadOnlyList<IReadOnlyList<string>> rows, int rowCount)
-    {
-        int rowsToWrite = Math.Min(rows.Count, rowCount + 1);
-        List<IReadOnlyList<string>> selectedRows = [];
-        for (int rowIndex = 0; rowIndex < rowsToWrite; rowIndex++)
-        {
-            if (rowIndex == 0)
-            {
-                continue;
-            }
-
-            selectedRows.Add(rows[rowIndex]);
-        }
-
-        return selectedRows;
     }
 }

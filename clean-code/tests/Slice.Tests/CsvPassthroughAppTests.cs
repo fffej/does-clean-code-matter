@@ -408,6 +408,54 @@ public sealed class CsvPassthroughAppTests
         }
     }
 
+    [TestMethod]
+    public void Run_ComposesMultipleCommandsLeftToRight()
+    {
+        string csv = "name,age,city\r\nAlice,45,London\r\nBob,29,Paris\r\nCara,31,Rome\r\nDan,40,Berlin\r\nEve,35,Madrid\r\n";
+        string path = CreateTempFile(csv);
+
+        try
+        {
+            using var output = new MemoryStream();
+            using var error = new StringWriter();
+
+            int exitCode = CsvPassthroughApp.Run([path, "where", "age>30", "|", "sort", "age", "|", "head", "3"], output, error);
+
+            Assert.AreEqual(0, exitCode);
+            Assert.AreEqual(string.Empty, error.ToString());
+            Assert.AreEqual(
+                "name,age,city\r\nCara,31,Rome\r\nEve,35,Madrid\r\nDan,40,Berlin\r\n",
+                ReadUtf8(output));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [TestMethod]
+    public void Run_FailsWhenRowBasedCommandFollowsAggregateResult()
+    {
+        string csv = "name,age\r\nAlice,31\r\nBob,29\r\n";
+        string path = CreateTempFile(csv);
+
+        try
+        {
+            using var output = new MemoryStream();
+            using var error = new StringWriter();
+
+            int exitCode = CsvPassthroughApp.Run([path, "count", "|", "head", "1"], output, error);
+
+            Assert.AreEqual(1, exitCode);
+            StringAssert.Contains(error.ToString(), "Command 'head' cannot be applied to an aggregate result.");
+            Assert.AreEqual(string.Empty, ReadUtf8(output));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static string CreateTempFile(string content)
     {
         string path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.csv");
