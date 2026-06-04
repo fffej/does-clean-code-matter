@@ -1,20 +1,19 @@
 using System.Globalization;
-using System.Text;
 
 namespace Slice;
 
 public static class CsvGroupByApp
 {
-    public static int Run(string csvPath, string groupColumn, string[] aggregateArguments, Stream output, TextWriter error)
+    public static QueryResult? Run(string csvPath, string groupColumn, string[] aggregateArguments, TextWriter error)
     {
         if (!TryParseAggregate(aggregateArguments, error, out AggregateSpecification specification))
         {
-            return 1;
+            return null;
         }
 
         if (!CsvInputReader.TryReadRows(csvPath, error, out List<IReadOnlyList<string>> rows))
         {
-            return 1;
+            return null;
         }
 
         IReadOnlyList<string> header = rows[0];
@@ -22,7 +21,7 @@ public static class CsvGroupByApp
         if (groupColumnIndex < 0)
         {
             error.WriteLine($"Column not found: {groupColumn}");
-            return 1;
+            return null;
         }
 
         int aggregateColumnIndex = -1;
@@ -32,7 +31,7 @@ public static class CsvGroupByApp
             if (aggregateColumnIndex < 0)
             {
                 error.WriteLine($"Column not found: {specification.ColumnName}");
-                return 1;
+                return null;
             }
         }
 
@@ -63,13 +62,13 @@ public static class CsvGroupByApp
             if (!decimal.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out decimal parsedValue))
             {
                 error.WriteLine($"Non-numeric value found in column {specification.ColumnName}: {value}");
-                return 1;
+                return null;
             }
 
             currentState.Sum += parsedValue;
         }
 
-        using StreamWriter writer = new(output, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), leaveOpen: true);
+        List<IReadOnlyList<string>> resultRows = [];
         foreach (string groupValue in groupOrder)
         {
             GroupAggregateState state = aggregatesByGroup[groupValue];
@@ -77,13 +76,14 @@ public static class CsvGroupByApp
                 ? state.Count.ToString(CultureInfo.InvariantCulture)
                 : state.Sum.ToString("G29", CultureInfo.InvariantCulture);
 
-            writer.Write(CsvWriter.FormatRow([groupValue, aggregateValue]));
-            writer.Write("\r\n");
+            resultRows.Add([groupValue, aggregateValue]);
         }
 
-        writer.Flush();
-        output.Flush();
-        return 0;
+        string aggregateHeader = specification.Kind == AggregateKind.Count
+            ? "count"
+            : $"sum_{specification.ColumnName}";
+
+        return new QueryResult.Table([groupColumn, aggregateHeader], resultRows);
     }
 
     private static bool TryParseAggregate(

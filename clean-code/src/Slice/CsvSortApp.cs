@@ -1,21 +1,20 @@
 using System.Globalization;
-using System.Text;
 
 namespace Slice;
 
 public static class CsvSortApp
 {
-    public static int Run(string csvPath, string sortColumn, string sortDirection, Stream output, TextWriter error)
+    public static QueryResult? Run(string csvPath, string sortColumn, string sortDirection, TextWriter error)
     {
         if (!TryParseSortArgument(sortColumn, sortDirection, out SortSpecification specification))
         {
             error.WriteLine($"Invalid sort expression: {sortColumn} {sortDirection}".TrimEnd());
-            return 1;
+            return null;
         }
 
         if (!CsvInputReader.TryReadRows(csvPath, error, out List<IReadOnlyList<string>> rows))
         {
-            return 1;
+            return null;
         }
 
         IReadOnlyList<string> header = rows[0];
@@ -23,7 +22,7 @@ public static class CsvSortApp
         if (columnIndex < 0)
         {
             error.WriteLine($"Column not found: {specification.ColumnName}");
-            return 1;
+            return null;
         }
 
         List<IReadOnlyList<string>> dataRows = rows.Skip(1).ToList();
@@ -33,19 +32,7 @@ public static class CsvSortApp
             ? SortRowsNumerically(dataRows, columnIndex, specification.Direction)
             : SortRowsAsText(dataRows, columnIndex, specification.Direction);
 
-        using StreamWriter writer = new(output, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), leaveOpen: true);
-        writer.Write(CsvWriter.FormatRow(header));
-        writer.Write("\r\n");
-
-        foreach (IReadOnlyList<string> row in sortedRows)
-        {
-            writer.Write(CsvWriter.FormatRow(row));
-            writer.Write("\r\n");
-        }
-
-        writer.Flush();
-        output.Flush();
-        return 0;
+        return new QueryResult.Table(header, sortedRows.ToList());
     }
 
     private static bool TryParseSortArgument(string sortColumn, string sortDirection, out SortSpecification specification)

@@ -1,20 +1,19 @@
 using System.Globalization;
-using System.Text;
 
 namespace Slice;
 
 public static class CsvWhereApp
 {
-    public static int Run(string csvPath, string filterExpression, Stream output, TextWriter error)
+    public static QueryResult? Run(string csvPath, string filterExpression, TextWriter error)
     {
         if (!CsvInputReader.TryReadRows(csvPath, error, out List<IReadOnlyList<string>> rows))
         {
-            return 1;
+            return null;
         }
 
         if (!TryParseFilter(filterExpression, error, out ComparisonFilter filter))
         {
-            return 1;
+            return null;
         }
 
         IReadOnlyList<string> header = rows[0];
@@ -22,15 +21,10 @@ public static class CsvWhereApp
         if (columnIndex < 0)
         {
             error.WriteLine($"Column not found: {filter.ColumnName}");
-            return 1;
+            return null;
         }
 
-        using StreamWriter writer = new(output, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), leaveOpen: true);
-        WriteHeader(writer, header);
-        WriteMatchingRows(writer, rows, columnIndex, filter);
-        writer.Flush();
-        output.Flush();
-        return 0;
+        return new QueryResult.Table(header, GetMatchingRows(rows, columnIndex, filter));
     }
 
     private static bool TryParseFilter(string filterExpression, TextWriter error, out ComparisonFilter filter)
@@ -88,18 +82,12 @@ public static class CsvWhereApp
         return decimal.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out number);
     }
 
-    private static void WriteHeader(TextWriter writer, IReadOnlyList<string> header)
-    {
-        writer.Write(CsvWriter.FormatRow(header));
-        writer.Write("\r\n");
-    }
-
-    private static void WriteMatchingRows(
-        TextWriter writer,
+    private static IReadOnlyList<IReadOnlyList<string>> GetMatchingRows(
         IReadOnlyList<IReadOnlyList<string>> rows,
         int columnIndex,
         ComparisonFilter filter)
     {
+        List<IReadOnlyList<string>> matchingRows = [];
         for (int rowIndex = 1; rowIndex < rows.Count; rowIndex++)
         {
             IReadOnlyList<string> row = rows[rowIndex];
@@ -108,9 +96,10 @@ public static class CsvWhereApp
                 continue;
             }
 
-            writer.Write(CsvWriter.FormatRow(row));
-            writer.Write("\r\n");
+            matchingRows.Add(row);
         }
+
+        return matchingRows;
     }
 
     private static bool Matches(IReadOnlyList<string> row, int columnIndex, ComparisonFilter filter)

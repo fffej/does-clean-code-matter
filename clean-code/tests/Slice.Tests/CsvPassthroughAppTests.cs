@@ -331,6 +331,83 @@ public sealed class CsvPassthroughAppTests
         }
     }
 
+    [TestMethod]
+    public void Run_SelectFormatsTabularResultsAsJson()
+    {
+        string csv = "name,age,city\r\nAlice,31,London\r\nBob,29,Paris\r\n";
+        string path = CreateTempFile(csv);
+
+        try
+        {
+            using var output = new MemoryStream();
+            using var error = new StringWriter();
+
+            int exitCode = CsvPassthroughApp.Run([path, "--format", "json", "select", "city,name"], output, error);
+
+            Assert.AreEqual(0, exitCode);
+            Assert.AreEqual(string.Empty, error.ToString());
+
+            using System.Text.Json.JsonDocument document = System.Text.Json.JsonDocument.Parse(ReadUtf8(output));
+            Assert.AreEqual(2, document.RootElement.GetArrayLength());
+            Assert.AreEqual("London", document.RootElement[0].GetProperty("city").GetString());
+            Assert.AreEqual("Alice", document.RootElement[0].GetProperty("name").GetString());
+            Assert.AreEqual("Paris", document.RootElement[1].GetProperty("city").GetString());
+            Assert.AreEqual("Bob", document.RootElement[1].GetProperty("name").GetString());
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [TestMethod]
+    public void Run_SelectFormatsTabularResultsAsTable()
+    {
+        string csv = "name,age,city\r\nAlice,31,London\r\nBob,29,Paris\r\n";
+        string path = CreateTempFile(csv);
+
+        try
+        {
+            using var output = new MemoryStream();
+            using var error = new StringWriter();
+
+            int exitCode = CsvPassthroughApp.Run([path, "select", "city,name", "--format", "table"], output, error);
+
+            Assert.AreEqual(0, exitCode);
+            Assert.AreEqual(string.Empty, error.ToString());
+            Assert.AreEqual(
+                "+--------+-------+\r\n| city   | name  |\r\n+--------+-------+\r\n| London | Alice |\r\n| Paris  | Bob   |\r\n+--------+-------+\r\n",
+                ReadUtf8(output));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [TestMethod]
+    public void Run_CountFormatsScalarResultsAsJson()
+    {
+        string csv = "name,age\r\nAlice,31\r\nBob,29\r\nCharlie,40\r\n";
+        string path = CreateTempFile(csv);
+
+        try
+        {
+            using var output = new MemoryStream();
+            using var error = new StringWriter();
+
+            int exitCode = CsvPassthroughApp.Run([path, "--format", "json", "count"], output, error);
+
+            Assert.AreEqual(0, exitCode);
+            Assert.AreEqual(string.Empty, error.ToString());
+            Assert.AreEqual("3\r\n", ReadUtf8(output));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static string CreateTempFile(string content)
     {
         string path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.csv");

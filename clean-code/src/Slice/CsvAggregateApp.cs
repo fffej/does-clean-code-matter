@@ -1,30 +1,24 @@
 using System.Globalization;
-using System.Text;
 
 namespace Slice;
 
 public static class CsvAggregateApp
 {
-    public static int RunCount(string csvPath, Stream output, TextWriter error)
+    public static QueryResult? RunCount(string csvPath, TextWriter error)
     {
         if (!CsvInputReader.TryReadRows(csvPath, error, out List<IReadOnlyList<string>> rows))
         {
-            return 1;
+            return null;
         }
 
-        using StreamWriter writer = new(output, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), leaveOpen: true);
-        writer.Write(rows.Count - 1);
-        writer.Write("\r\n");
-        writer.Flush();
-        output.Flush();
-        return 0;
+        return new QueryResult.Scalar((rows.Count - 1).ToString(CultureInfo.InvariantCulture));
     }
 
-    public static int RunSum(string csvPath, string columnName, Stream output, TextWriter error)
+    public static QueryResult? RunSum(string csvPath, string columnName, TextWriter error)
     {
         if (!CsvInputReader.TryReadRows(csvPath, error, out List<IReadOnlyList<string>> rows))
         {
-            return 1;
+            return null;
         }
 
         IReadOnlyList<string> header = rows[0];
@@ -32,21 +26,16 @@ public static class CsvAggregateApp
         if (columnIndex < 0)
         {
             error.WriteLine($"Column not found: {columnName}");
-            return 1;
+            return null;
         }
 
         if (!TrySumColumn(rows, columnIndex, out decimal sum, out string? invalidValue))
         {
             error.WriteLine($"Non-numeric value found in column {columnName}: {invalidValue}");
-            return 1;
+            return null;
         }
 
-        using StreamWriter writer = new(output, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), leaveOpen: true);
-        writer.Write(sum.ToString("G29", CultureInfo.InvariantCulture));
-        writer.Write("\r\n");
-        writer.Flush();
-        output.Flush();
-        return 0;
+        return new QueryResult.Scalar(sum.ToString("G29", CultureInfo.InvariantCulture));
     }
 
     private static bool TrySumColumn(

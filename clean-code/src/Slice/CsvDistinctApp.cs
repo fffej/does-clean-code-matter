@@ -4,32 +4,27 @@ namespace Slice;
 
 public static class CsvDistinctApp
 {
-    public static int Run(string csvPath, string[] distinctColumnsArguments, Stream output, TextWriter error)
+    public static QueryResult? Run(string csvPath, string[] distinctColumnsArguments, TextWriter error)
     {
         IReadOnlyList<string> distinctColumns = ParseDistinctColumns(distinctColumnsArguments, error);
         if (distinctColumns.Count == 0)
         {
-            return 1;
+            return null;
         }
 
         if (!CsvInputReader.TryReadRows(csvPath, error, out List<IReadOnlyList<string>> rows))
         {
-            return 1;
+            return null;
         }
 
         IReadOnlyList<string> header = rows[0];
         int[] columnIndexes = ResolveColumnIndexes(header, distinctColumns, error);
         if (columnIndexes.Length == 0)
         {
-            return 1;
+            return null;
         }
 
-        using StreamWriter writer = new(output, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), leaveOpen: true);
-        WriteHeader(writer, header, columnIndexes);
-        WriteDistinctRows(writer, rows, columnIndexes);
-        writer.Flush();
-        output.Flush();
-        return 0;
+        return new QueryResult.Table(GetSelectedValues(header, columnIndexes), GetDistinctRows(rows, columnIndexes));
     }
 
     private static IReadOnlyList<string> ParseDistinctColumns(string[] distinctColumnsArguments, TextWriter error)
@@ -82,17 +77,11 @@ public static class CsvDistinctApp
         return indexes;
     }
 
-    private static void WriteHeader(TextWriter writer, IReadOnlyList<string> header, IReadOnlyList<int> columnIndexes)
-    {
-        writer.Write(CsvWriter.FormatRow(GetSelectedValues(header, columnIndexes)));
-        writer.Write("\r\n");
-    }
-
-    private static void WriteDistinctRows(
-        TextWriter writer,
+    private static IReadOnlyList<IReadOnlyList<string>> GetDistinctRows(
         IReadOnlyList<IReadOnlyList<string>> rows,
         IReadOnlyList<int> columnIndexes)
     {
+        List<IReadOnlyList<string>> distinctRows = [];
         HashSet<string> seenKeys = [];
 
         for (int rowIndex = 1; rowIndex < rows.Count; rowIndex++)
@@ -104,9 +93,10 @@ public static class CsvDistinctApp
                 continue;
             }
 
-            writer.Write(CsvWriter.FormatRow(GetSelectedValues(row, columnIndexes)));
-            writer.Write("\r\n");
+            distinctRows.Add(GetSelectedValues(row, columnIndexes));
         }
+
+        return distinctRows;
     }
 
     private static string[] GetSelectedValues(IReadOnlyList<string> row, IReadOnlyList<int> columnIndexes)

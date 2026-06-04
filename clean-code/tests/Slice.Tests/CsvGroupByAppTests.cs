@@ -20,7 +20,7 @@ public sealed class CsvGroupByAppTests
 
             Assert.AreEqual(0, exitCode);
             Assert.AreEqual(string.Empty, error.ToString());
-            Assert.AreEqual("London,2\r\nParis,2\r\nRome,1\r\n", ReadUtf8(output));
+            Assert.AreEqual("city,count\r\nLondon,2\r\nParis,2\r\nRome,1\r\n", ReadUtf8(output));
         }
         finally
         {
@@ -43,7 +43,7 @@ public sealed class CsvGroupByAppTests
 
             Assert.AreEqual(0, exitCode);
             Assert.AreEqual(string.Empty, error.ToString());
-            Assert.AreEqual("London,15\r\nParis,20\r\nRome,7\r\n", ReadUtf8(output));
+            Assert.AreEqual("city,sum_amount\r\nLondon,15\r\nParis,20\r\nRome,7\r\n", ReadUtf8(output));
         }
         finally
         {
