@@ -120,6 +120,79 @@ public sealed class CsvPassthroughAppTests
         }
     }
 
+    [TestMethod]
+    public void Run_HeadKeepsHeaderAndFirstNDataRows()
+    {
+        string csv = "name,age\r\nAlice,31\r\nBob,29\r\nCharlie,40\r\nDora,25\r\nEve,33\r\nFrank,28\r\n";
+        string path = CreateTempFile(csv);
+
+        try
+        {
+            using var output = new MemoryStream();
+            using var error = new StringWriter();
+
+            int exitCode = CsvPassthroughApp.Run([path, "head", "5"], output, error);
+
+            Assert.AreEqual(0, exitCode);
+            Assert.AreEqual(string.Empty, error.ToString());
+            Assert.AreEqual(
+                "name,age\r\nAlice,31\r\nBob,29\r\nCharlie,40\r\nDora,25\r\nEve,33\r\n",
+                ReadUtf8(output));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [TestMethod]
+    public void Run_HeadOutputsAllRowsWhenFewerThanRequested()
+    {
+        string csv = "name,age\r\nAlice,31\r\nBob,29\r\n";
+        string path = CreateTempFile(csv);
+
+        try
+        {
+            using var output = new MemoryStream();
+            using var error = new StringWriter();
+
+            int exitCode = CsvPassthroughApp.Run([path, "head", "5"], output, error);
+
+            Assert.AreEqual(0, exitCode);
+            Assert.AreEqual(string.Empty, error.ToString());
+            Assert.AreEqual(csv, ReadUtf8(output));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [DataTestMethod]
+    [DataRow("0")]
+    [DataRow("-1")]
+    public void Run_HeadFailsWhenCountIsNotPositive(string rowCountArgument)
+    {
+        string csv = "name,age\r\nAlice,31\r\n";
+        string path = CreateTempFile(csv);
+
+        try
+        {
+            using var output = new MemoryStream();
+            using var error = new StringWriter();
+
+            int exitCode = CsvPassthroughApp.Run([path, "head", rowCountArgument], output, error);
+
+            Assert.AreEqual(1, exitCode);
+            StringAssert.Contains(error.ToString(), $"Invalid head count: {rowCountArgument}");
+            Assert.AreEqual(string.Empty, ReadUtf8(output));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     private static string CreateTempFile(string content)
     {
         string path = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.csv");
