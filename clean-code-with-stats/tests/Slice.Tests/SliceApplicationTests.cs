@@ -48,6 +48,87 @@ public sealed class SliceApplicationTests
     }
 
     [TestMethod]
+    public async Task RunAsync_WithPipelineCommands_ComposesRowsLeftToRight()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.csv");
+        var input = string.Join("\r\n", [
+            "name,age,city",
+            "Ada,36,London",
+            "Bob,29,Paris",
+            "Carol,31,Berlin",
+            "Dave,45,Rome",
+            "Eve,25,Oslo",
+            "Frank,41,Dublin",
+            string.Empty
+        ]);
+        var expected = string.Join("\r\n", [
+            "name,age,city",
+            "Carol,31,Berlin",
+            "Ada,36,London",
+            "Frank,41,Dublin",
+            string.Empty
+        ]);
+        var inputBytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(input);
+        var expectedBytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(expected);
+
+        try
+        {
+            await File.WriteAllBytesAsync(tempFile, inputBytes);
+
+            await using var output = new MemoryStream();
+            var app = new SliceApplication(output, TextWriter.Null);
+
+            var exitCode = await app.RunAsync([tempFile, "where", "age>30", "|", "sort", "age", "|", "head", "3"]);
+
+            Assert.AreEqual(0, exitCode);
+            CollectionAssert.AreEqual(expectedBytes, output.ToArray());
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    [TestMethod]
+    public async Task RunAsync_WithRowCommandAfterAggregate_ReturnsAnError()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.csv");
+        var input = string.Join("\r\n", [
+            "name,age,city",
+            "Ada,36,London",
+            "Bob,29,Paris",
+            "Carol,31,Berlin",
+            string.Empty
+        ]);
+        var inputBytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(input);
+
+        try
+        {
+            await File.WriteAllBytesAsync(tempFile, inputBytes);
+
+            await using var output = new MemoryStream();
+            var error = new StringWriter();
+            var app = new SliceApplication(output, error);
+
+            var exitCode = await app.RunAsync([tempFile, "count", "|", "head", "1"]);
+
+            Assert.AreEqual(1, exitCode);
+            StringAssert.Contains(error.ToString(), "Command cannot operate on scalar result: head");
+            Assert.AreEqual(0, output.Length);
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    [TestMethod]
     public async Task RunAsync_WithMissingColumn_ReturnsAnError()
     {
         var tempFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.csv");

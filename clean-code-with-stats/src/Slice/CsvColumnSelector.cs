@@ -6,6 +6,55 @@ namespace Slice;
 
 internal sealed class CsvTableProcessor
 {
+    public ExecutionOutcome LoadTable(Stream input)
+    {
+        using var parser = CreateParser(input);
+
+        var headers = parser.ReadFields();
+        if (headers is null)
+        {
+            return ExecutionOutcome.Failure("CSV file is empty.");
+        }
+
+        var rows = new List<IReadOnlyList<string>>();
+        while (!parser.EndOfData)
+        {
+            var fields = parser.ReadFields();
+            if (fields is null)
+            {
+                continue;
+            }
+
+            rows.Add(fields);
+        }
+
+        return ExecutionOutcome.Success(new TableQueryResult(headers, rows));
+    }
+
+    public ExecutionOutcome ApplyCommand(
+        QueryResult current,
+        string commandName,
+        IReadOnlyList<string> commandArguments)
+    {
+        if (current is not TableQueryResult table)
+        {
+            return ExecutionOutcome.Failure($"Command cannot operate on scalar result: {commandName}");
+        }
+
+        return commandName switch
+        {
+            "select" => SelectColumns(table, ParseRequestedColumns(commandArguments)),
+            "where" => FilterRows(table, commandArguments[0]),
+            "sort" => SortRows(table, commandArguments[0], commandArguments.Count > 1 ? commandArguments[1] : null),
+            "head" => HeadRows(table, commandArguments[0]),
+            "distinct" => DistinctRows(table, ParseRequestedColumns(commandArguments)),
+            "count" => CountRows(table),
+            "sum" => SumRows(table, commandArguments[0]),
+            "groupby" => GroupRows(table, commandArguments),
+            _ => ExecutionOutcome.Failure($"Unknown command: {commandName}")
+        };
+    }
+
     public IReadOnlyList<string> ParseRequestedColumns(string columnsArgument)
     {
         return ParseRequestedColumns(new[] { columnsArgument });
@@ -33,43 +82,34 @@ internal sealed class CsvTableProcessor
         Stream input,
         IReadOnlyList<string> requestedColumns)
     {
+        var tableOutcome = LoadTable(input);
+        if (tableOutcome.ErrorMessage is not null)
+        {
+            return tableOutcome;
+        }
+
+        return SelectColumns((TableQueryResult)tableOutcome.Result!, requestedColumns);
+    }
+
+    private ExecutionOutcome SelectColumns(
+        TableQueryResult table,
+        IReadOnlyList<string> requestedColumns)
+    {
         if (requestedColumns.Count == 0)
         {
             return ExecutionOutcome.Failure("No columns were selected.");
         }
 
-        using var parser = new TextFieldParser(input, Encoding.UTF8)
-        {
-            TextFieldType = FieldType.Delimited,
-            HasFieldsEnclosedInQuotes = true,
-            TrimWhiteSpace = false
-        };
-
-        parser.SetDelimiters(",");
-
-        var headers = parser.ReadFields();
-        if (headers is null)
-        {
-            return ExecutionOutcome.Failure("CSV file is empty.");
-        }
-
-        if (!TryResolveRequestedColumnIndexes(headers, requestedColumns, out var selectedIndexes, out var errorMessage))
+        if (!TryResolveRequestedColumnIndexes(table.Headers, requestedColumns, out var selectedIndexes, out var errorMessage))
         {
             return ExecutionOutcome.Failure(errorMessage!);
         }
 
-        var selectedHeaders = selectedIndexes.Select(index => headers[index]).ToArray();
+        var selectedHeaders = selectedIndexes.Select(index => table.Headers[index]).ToArray();
         var rows = new List<IReadOnlyList<string>>();
-
-        while (!parser.EndOfData)
+        foreach (var row in table.Rows)
         {
-            var fields = parser.ReadFields();
-            if (fields is null)
-            {
-                continue;
-            }
-
-            rows.Add(BuildSelectedRow(fields, selectedIndexes));
+            rows.Add(BuildSelectedRow(row, selectedIndexes));
         }
 
         return ExecutionOutcome.Success(new TableQueryResult(selectedHeaders, rows));
@@ -79,45 +119,43 @@ internal sealed class CsvTableProcessor
         Stream input,
         IReadOnlyList<string> requestedColumns)
     {
+        var tableOutcome = LoadTable(input);
+        if (tableOutcome.ErrorMessage is not null)
+        {
+            return tableOutcome;
+        }
+
+        return DistinctRows((TableQueryResult)tableOutcome.Result!, requestedColumns);
+    }
+
+    private ExecutionOutcome DistinctRows(
+        TableQueryResult table,
+        IReadOnlyList<string> requestedColumns)
+    {
         if (requestedColumns.Count == 0)
         {
             return ExecutionOutcome.Failure("No columns were selected.");
         }
 
-        using var parser = CreateParser(input);
-
-        var headers = parser.ReadFields();
-        if (headers is null)
-        {
-            return ExecutionOutcome.Failure("CSV file is empty.");
-        }
-
-        if (!TryResolveRequestedColumnIndexes(headers, requestedColumns, out var selectedIndexes, out var errorMessage))
+        if (!TryResolveRequestedColumnIndexes(table.Headers, requestedColumns, out var selectedIndexes, out var errorMessage))
         {
             return ExecutionOutcome.Failure(errorMessage!);
         }
 
         var seenRows = new HashSet<string[]>(new StringArraySequenceComparer());
         var rows = new List<IReadOnlyList<string>>();
-
-        while (!parser.EndOfData)
+        foreach (var row in table.Rows)
         {
-            var fields = parser.ReadFields();
-            if (fields is null)
-            {
-                continue;
-            }
-
-            var distinctKey = BuildDistinctKey(fields, selectedIndexes);
+            var distinctKey = BuildDistinctKey(row, selectedIndexes);
             if (!seenRows.Add(distinctKey))
             {
                 continue;
             }
 
-            rows.Add(BuildSelectedRow(fields, selectedIndexes));
+            rows.Add(BuildSelectedRow(row, selectedIndexes));
         }
 
-        var selectedHeaders = selectedIndexes.Select(index => headers[index]).ToArray();
+        var selectedHeaders = selectedIndexes.Select(index => table.Headers[index]).ToArray();
         return ExecutionOutcome.Success(new TableQueryResult(selectedHeaders, rows));
     }
 
@@ -125,21 +163,26 @@ internal sealed class CsvTableProcessor
         Stream input,
         string whereExpression)
     {
+        var tableOutcome = LoadTable(input);
+        if (tableOutcome.ErrorMessage is not null)
+        {
+            return tableOutcome;
+        }
+
+        return FilterRows((TableQueryResult)tableOutcome.Result!, whereExpression);
+    }
+
+    private ExecutionOutcome FilterRows(
+        TableQueryResult table,
+        string whereExpression)
+    {
         if (!CsvWhereClause.TryParse(whereExpression, out var clause, out var errorMessage))
         {
             return ExecutionOutcome.Failure(errorMessage);
         }
 
-        using var parser = CreateParser(input);
-
-        var headers = parser.ReadFields();
-        if (headers is null)
-        {
-            return ExecutionOutcome.Failure("CSV file is empty.");
-        }
-
         var filteredColumnIndex = Array.FindIndex(
-            headers,
+            table.Headers.ToArray(),
             header => string.Equals(header, clause.ColumnName, StringComparison.OrdinalIgnoreCase));
 
         if (filteredColumnIndex < 0)
@@ -148,16 +191,9 @@ internal sealed class CsvTableProcessor
         }
 
         var rows = new List<IReadOnlyList<string>>();
-
-        while (!parser.EndOfData)
+        foreach (var fields in table.Rows)
         {
-            var fields = parser.ReadFields();
-            if (fields is null)
-            {
-                continue;
-            }
-
-            var candidateValue = filteredColumnIndex < fields.Length ? fields[filteredColumnIndex] : string.Empty;
+            var candidateValue = filteredColumnIndex < fields.Count ? fields[filteredColumnIndex] : string.Empty;
             if (!clause.Matches(candidateValue))
             {
                 continue;
@@ -166,11 +202,25 @@ internal sealed class CsvTableProcessor
             rows.Add(fields);
         }
 
-        return ExecutionOutcome.Success(new TableQueryResult(headers, rows));
+        return ExecutionOutcome.Success(new TableQueryResult(table.Headers, rows));
     }
 
     public ExecutionOutcome SortRows(
         Stream input,
+        string columnName,
+        string? directionArgument)
+    {
+        var tableOutcome = LoadTable(input);
+        if (tableOutcome.ErrorMessage is not null)
+        {
+            return tableOutcome;
+        }
+
+        return SortRows((TableQueryResult)tableOutcome.Result!, columnName, directionArgument);
+    }
+
+    private ExecutionOutcome SortRows(
+        TableQueryResult table,
         string columnName,
         string? directionArgument)
     {
@@ -179,16 +229,8 @@ internal sealed class CsvTableProcessor
             return ExecutionOutcome.Failure(errorMessage!);
         }
 
-        using var parser = CreateParser(input);
-
-        var headers = parser.ReadFields();
-        if (headers is null)
-        {
-            return ExecutionOutcome.Failure("CSV file is empty.");
-        }
-
         var sortColumnIndex = Array.FindIndex(
-            headers,
+            table.Headers.ToArray(),
             header => string.Equals(header, columnName, StringComparison.OrdinalIgnoreCase));
 
         if (sortColumnIndex < 0)
@@ -197,14 +239,8 @@ internal sealed class CsvTableProcessor
         }
 
         var rows = new List<CsvRow>();
-        while (!parser.EndOfData)
+        foreach (var fields in table.Rows)
         {
-            var fields = parser.ReadFields();
-            if (fields is null)
-            {
-                continue;
-            }
-
             rows.Add(new CsvRow(fields, GetSortValue(fields, sortColumnIndex)));
         }
 
@@ -218,11 +254,24 @@ internal sealed class CsvTableProcessor
                 : rows.OrderByDescending(row => row.SortValue.TextValue, StringComparer.Ordinal);
 
         var sortedRows = orderedRows.Select(row => row.Fields).ToArray();
-        return ExecutionOutcome.Success(new TableQueryResult(headers, sortedRows));
+        return ExecutionOutcome.Success(new TableQueryResult(table.Headers, sortedRows));
     }
 
     public ExecutionOutcome HeadRows(
         Stream input,
+        string rowCountArgument)
+    {
+        var tableOutcome = LoadTable(input);
+        if (tableOutcome.ErrorMessage is not null)
+        {
+            return tableOutcome;
+        }
+
+        return HeadRows((TableQueryResult)tableOutcome.Result!, rowCountArgument);
+    }
+
+    private ExecutionOutcome HeadRows(
+        TableQueryResult table,
         string rowCountArgument)
     {
         if (!TryParsePositiveRowCount(rowCountArgument, out var rowCount, out var errorMessage))
@@ -230,68 +279,52 @@ internal sealed class CsvTableProcessor
             return ExecutionOutcome.Failure(errorMessage!);
         }
 
-        using var parser = CreateParser(input);
-
-        var headers = parser.ReadFields();
-        if (headers is null)
-        {
-            return ExecutionOutcome.Failure("CSV file is empty.");
-        }
-
         var rows = new List<IReadOnlyList<string>>();
-
-        while (rowCount > 0 && !parser.EndOfData)
+        foreach (var row in table.Rows)
         {
-            var fields = parser.ReadFields();
-            if (fields is null)
+            if (rowCount == 0)
             {
-                continue;
+                break;
             }
 
-            rows.Add(fields);
+            rows.Add(row);
             rowCount--;
         }
 
-        return ExecutionOutcome.Success(new TableQueryResult(headers, rows));
+        return ExecutionOutcome.Success(new TableQueryResult(table.Headers, rows));
     }
 
     public ExecutionOutcome CountRows(Stream input)
     {
-        using var parser = CreateParser(input);
-
-        var headers = parser.ReadFields();
-        if (headers is null)
+        var tableOutcome = LoadTable(input);
+        if (tableOutcome.ErrorMessage is not null)
         {
-            return ExecutionOutcome.Failure("CSV file is empty.");
+            return tableOutcome;
         }
 
-        var rowCount = 0;
-        while (!parser.EndOfData)
-        {
-            var fields = parser.ReadFields();
-            if (fields is null)
-            {
-                continue;
-            }
+        return CountRows((TableQueryResult)tableOutcome.Result!);
+    }
 
-            rowCount++;
-        }
-
-        return ExecutionOutcome.Success(new ScalarQueryResult(rowCount));
+    private ExecutionOutcome CountRows(TableQueryResult table)
+    {
+        return ExecutionOutcome.Success(new ScalarQueryResult(table.Rows.Count));
     }
 
     public ExecutionOutcome SumRows(Stream input, string columnName)
     {
-        using var parser = CreateParser(input);
-
-        var headers = parser.ReadFields();
-        if (headers is null)
+        var tableOutcome = LoadTable(input);
+        if (tableOutcome.ErrorMessage is not null)
         {
-            return ExecutionOutcome.Failure("CSV file is empty.");
+            return tableOutcome;
         }
 
+        return SumRows((TableQueryResult)tableOutcome.Result!, columnName);
+    }
+
+    private ExecutionOutcome SumRows(TableQueryResult table, string columnName)
+    {
         var columnIndex = Array.FindIndex(
-            headers,
+            table.Headers.ToArray(),
             header => string.Equals(header, columnName, StringComparison.OrdinalIgnoreCase));
 
         if (columnIndex < 0)
@@ -300,15 +333,9 @@ internal sealed class CsvTableProcessor
         }
 
         decimal total = 0m;
-        while (!parser.EndOfData)
+        foreach (var fields in table.Rows)
         {
-            var fields = parser.ReadFields();
-            if (fields is null)
-            {
-                continue;
-            }
-
-            var candidateValue = columnIndex < fields.Length ? fields[columnIndex] : string.Empty;
+            var candidateValue = columnIndex < fields.Count ? fields[columnIndex] : string.Empty;
             if (!decimal.TryParse(candidateValue, NumberStyles.Number, CultureInfo.InvariantCulture, out var numericValue))
             {
                 return ExecutionOutcome.Failure($"Column must contain only numeric values: {columnName}");
@@ -324,20 +351,25 @@ internal sealed class CsvTableProcessor
         Stream input,
         IReadOnlyList<string> groupByArguments)
     {
+        var tableOutcome = LoadTable(input);
+        if (tableOutcome.ErrorMessage is not null)
+        {
+            return tableOutcome;
+        }
+
+        return GroupRows((TableQueryResult)tableOutcome.Result!, groupByArguments);
+    }
+
+    private ExecutionOutcome GroupRows(
+        TableQueryResult table,
+        IReadOnlyList<string> groupByArguments)
+    {
         if (!GroupByRequest.TryParse(groupByArguments, out var request, out var errorMessage))
         {
             return ExecutionOutcome.Failure(errorMessage);
         }
 
-        using var parser = CreateParser(input);
-
-        var headers = parser.ReadFields();
-        if (headers is null)
-        {
-            return ExecutionOutcome.Failure("CSV file is empty.");
-        }
-
-        if (!TryResolveColumnIndex(headers, request.GroupColumnName, out var groupColumnIndex))
+        if (!TryResolveColumnIndex(table.Headers, request.GroupColumnName, out var groupColumnIndex))
         {
             return ExecutionOutcome.Failure($"Column not found: {request.GroupColumnName}");
         }
@@ -345,7 +377,7 @@ internal sealed class CsvTableProcessor
         var aggregateColumnIndex = -1;
         if (request.AggregateKind is GroupByAggregateKind.Sum)
         {
-            if (!TryResolveColumnIndex(headers, request.AggregateColumnName!, out aggregateColumnIndex))
+            if (!TryResolveColumnIndex(table.Headers, request.AggregateColumnName!, out aggregateColumnIndex))
             {
                 return ExecutionOutcome.Failure($"Column not found: {request.AggregateColumnName}");
             }
@@ -354,15 +386,9 @@ internal sealed class CsvTableProcessor
         var groups = new List<GroupAggregation>();
         var groupLookup = new Dictionary<string, GroupAggregation>(StringComparer.Ordinal);
 
-        while (!parser.EndOfData)
+        foreach (var fields in table.Rows)
         {
-            var fields = parser.ReadFields();
-            if (fields is null)
-            {
-                continue;
-            }
-
-            var groupValue = groupColumnIndex < fields.Length ? fields[groupColumnIndex] : string.Empty;
+            var groupValue = groupColumnIndex < fields.Count ? fields[groupColumnIndex] : string.Empty;
             if (!groupLookup.TryGetValue(groupValue, out var aggregation))
             {
                 aggregation = new GroupAggregation(groupValue);
@@ -377,7 +403,7 @@ internal sealed class CsvTableProcessor
                 continue;
             }
 
-            var candidateValue = aggregateColumnIndex < fields.Length ? fields[aggregateColumnIndex] : string.Empty;
+            var candidateValue = aggregateColumnIndex < fields.Count ? fields[aggregateColumnIndex] : string.Empty;
             if (!decimal.TryParse(candidateValue, NumberStyles.Number, CultureInfo.InvariantCulture, out var numericValue))
             {
                 return ExecutionOutcome.Failure($"Column must contain only numeric values: {request.AggregateColumnName}");

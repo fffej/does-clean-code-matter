@@ -3,7 +3,8 @@ namespace Slice;
 public sealed class SliceApplication
 {
     private const string UsageMessage =
-        "Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc] | head <count> | distinct <column> [<column>...] | count | sum <column> | groupby <column> count | groupby <column> sum <column> [--format csv|json|table]";
+        "Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc] | head <count> | distinct <column> [<column>...] | count | sum <column> | groupby <column> count | groupby <column> sum <column> [--format csv|json|table]\n" +
+        "Commands may be chained with | and are evaluated from left to right.";
 
     private readonly Stream _output;
     private readonly TextWriter _error;
@@ -17,7 +18,7 @@ public sealed class SliceApplication
 
     public async Task<int> RunAsync(IReadOnlyList<string> args)
     {
-        if (!TryParseArguments(args, out var inputPath, out var command, out var commandArguments, out var outputFormat))
+        if (!TryParseArguments(args, out var inputPath, out var commands, out var outputFormat))
         {
             await _error.WriteLineAsync(UsageMessage).ConfigureAwait(false);
             return 1;
@@ -31,81 +32,38 @@ public sealed class SliceApplication
 
         await using var input = File.OpenRead(inputPath);
 
-        var outcome = command switch
+        var loadOutcome = _csvProcessor.LoadTable(input);
+        if (loadOutcome.ErrorMessage is not null)
         {
-            "select" => ExecuteSelect(input, commandArguments),
-            "where" => ExecuteWhere(input, commandArguments),
-            "sort" => ExecuteSort(input, commandArguments),
-            "head" => ExecuteHead(input, commandArguments),
-            "distinct" => ExecuteDistinct(input, commandArguments),
-            "count" => ExecuteCount(input),
-            "sum" => ExecuteSum(input, commandArguments),
-            "groupby" => ExecuteGroupBy(input, commandArguments),
-            _ => ExecutionOutcome.Failure(UsageMessage)
-        };
-
-        if (outcome.ErrorMessage is not null)
-        {
-            await _error.WriteLineAsync(outcome.ErrorMessage).ConfigureAwait(false);
+            await _error.WriteLineAsync(loadOutcome.ErrorMessage).ConfigureAwait(false);
             return 1;
         }
 
-        await OutputRenderer.RenderAsync(_output, outcome.Result!, outputFormat).ConfigureAwait(false);
+        QueryResult currentResult = loadOutcome.Result!;
+        foreach (var command in commands)
+        {
+            var outcome = _csvProcessor.ApplyCommand(currentResult, command.Name, command.Arguments);
+            if (outcome.ErrorMessage is not null)
+            {
+                await _error.WriteLineAsync(outcome.ErrorMessage).ConfigureAwait(false);
+                return 1;
+            }
+
+            currentResult = outcome.Result!;
+        }
+
+        await OutputRenderer.RenderAsync(_output, currentResult, outputFormat).ConfigureAwait(false);
         return 0;
-    }
-
-    private ExecutionOutcome ExecuteSelect(Stream input, IReadOnlyList<string> commandArguments)
-    {
-        IReadOnlyList<string> selectedColumns = _csvProcessor.ParseRequestedColumns(commandArguments);
-        return _csvProcessor.SelectColumns(input, selectedColumns);
-    }
-
-    private ExecutionOutcome ExecuteWhere(Stream input, IReadOnlyList<string> commandArguments)
-    {
-        return _csvProcessor.FilterRows(input, commandArguments[0]);
-    }
-
-    private ExecutionOutcome ExecuteSort(Stream input, IReadOnlyList<string> commandArguments)
-    {
-        return _csvProcessor.SortRows(input, commandArguments[0], commandArguments.Count > 1 ? commandArguments[1] : null);
-    }
-
-    private ExecutionOutcome ExecuteHead(Stream input, IReadOnlyList<string> commandArguments)
-    {
-        return _csvProcessor.HeadRows(input, commandArguments[0]);
-    }
-
-    private ExecutionOutcome ExecuteDistinct(Stream input, IReadOnlyList<string> commandArguments)
-    {
-        IReadOnlyList<string> distinctColumns = _csvProcessor.ParseRequestedColumns(commandArguments);
-        return _csvProcessor.DistinctRows(input, distinctColumns);
-    }
-
-    private ExecutionOutcome ExecuteCount(Stream input)
-    {
-        return _csvProcessor.CountRows(input);
-    }
-
-    private ExecutionOutcome ExecuteSum(Stream input, IReadOnlyList<string> commandArguments)
-    {
-        return _csvProcessor.SumRows(input, commandArguments[0]);
-    }
-
-    private ExecutionOutcome ExecuteGroupBy(Stream input, IReadOnlyList<string> commandArguments)
-    {
-        return _csvProcessor.GroupRows(input, commandArguments);
     }
 
     private static bool TryParseArguments(
         IReadOnlyList<string> args,
         out string inputPath,
-        out string command,
-        out IReadOnlyList<string> commandArguments,
+        out IReadOnlyList<PipelineCommand> commands,
         out OutputFormat outputFormat)
     {
         inputPath = string.Empty;
-        command = string.Empty;
-        commandArguments = Array.Empty<string>();
+        commands = Array.Empty<PipelineCommand>();
         outputFormat = OutputFormat.Csv;
 
         if (args.Count < 2)
@@ -141,19 +99,18 @@ public sealed class SliceApplication
             return false;
         }
 
-        command = remainingArguments[0];
-        commandArguments = remainingArguments.Count > 1 ? remainingArguments.Skip(1).ToArray() : Array.Empty<string>();
-
-        return command switch
+        var pipelineTokens = remainingArguments.ToArray();
+        if (pipelineTokens.Length == 0)
         {
-            "select" or "where" or "head" => commandArguments.Count == 1,
-            "sort" => commandArguments.Count is 1 or 2,
-            "distinct" => commandArguments.Count >= 1,
-            "count" => commandArguments.Count == 0,
-            "sum" => commandArguments.Count == 1,
-            "groupby" => commandArguments.Count is 2 or 3,
-            _ => false
-        };
+            return false;
+        }
+
+        if (!TryParsePipelineCommands(pipelineTokens, out commands))
+        {
+            return false;
+        }
+
+        return commands.Count > 0;
     }
 
     private static bool TryParseOutputFormat(string value, out OutputFormat outputFormat)
@@ -179,4 +136,77 @@ public sealed class SliceApplication
         outputFormat = default;
         return false;
     }
+
+    private static bool TryParsePipelineCommands(
+        IReadOnlyList<string> pipelineTokens,
+        out IReadOnlyList<PipelineCommand> commands)
+    {
+        var parsedCommands = new List<PipelineCommand>();
+        var currentTokens = new List<string>();
+
+        foreach (var token in pipelineTokens)
+        {
+            if (string.Equals(token, "|", StringComparison.Ordinal))
+            {
+                if (!TryAddParsedCommand(currentTokens, parsedCommands))
+                {
+                    commands = Array.Empty<PipelineCommand>();
+                    return false;
+                }
+
+                currentTokens.Clear();
+                continue;
+            }
+
+            currentTokens.Add(token);
+        }
+
+        if (!TryAddParsedCommand(currentTokens, parsedCommands))
+        {
+            commands = Array.Empty<PipelineCommand>();
+            return false;
+        }
+
+        commands = parsedCommands;
+        return commands.Count > 0;
+    }
+
+    private static bool TryAddParsedCommand(
+        IReadOnlyList<string> commandTokens,
+        ICollection<PipelineCommand> commands)
+    {
+        if (commandTokens.Count == 0)
+        {
+            return false;
+        }
+
+        var commandName = commandTokens[0];
+        var commandArguments = commandTokens.Count > 1
+            ? commandTokens.Skip(1).ToArray()
+            : Array.Empty<string>();
+
+        if (!IsValidCommandShape(commandName, commandArguments))
+        {
+            return false;
+        }
+
+        commands.Add(new PipelineCommand(commandName, commandArguments));
+        return true;
+    }
+
+    private static bool IsValidCommandShape(string commandName, IReadOnlyList<string> commandArguments)
+    {
+        return commandName switch
+        {
+            "select" or "where" or "head" => commandArguments.Count == 1,
+            "sort" => commandArguments.Count is 1 or 2,
+            "distinct" => commandArguments.Count >= 1,
+            "count" => commandArguments.Count == 0,
+            "sum" => commandArguments.Count == 1,
+            "groupby" => commandArguments.Count is 2 or 3,
+            _ => false
+        };
+    }
+
+    private sealed record PipelineCommand(string Name, IReadOnlyList<string> Arguments);
 }
