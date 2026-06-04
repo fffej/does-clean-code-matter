@@ -14,6 +14,11 @@ var tests = new List<(string Name, Action Test)>
     ("keeps only the first five data rows with head", KeepsOnlyTheFirstFiveDataRowsWithHead),
     ("keeps all rows when head exceeds row count", KeepsAllRowsWhenHeadExceedsRowCount),
     ("returns failure when head row count is not positive", ReturnsFailureWhenHeadRowCountIsNotPositive),
+    ("counts all data rows", CountsAllDataRows),
+    ("counts remaining rows after filtering", CountsRemainingRowsAfterFiltering),
+    ("sums a numeric column", SumsANumericColumn),
+    ("returns failure when sum column values are nonnumeric", ReturnsFailureWhenSumColumnValuesAreNonnumeric),
+    ("returns failure when sum column is missing", ReturnsFailureWhenSumColumnIsMissing),
     ("sorts numeric rows descending", SortsNumericRowsDescending),
     ("sorts rows ascending by default", SortsRowsAscendingByDefault),
     ("sorts text rows descending", SortsTextRowsDescending),
@@ -304,6 +309,171 @@ static void ReturnsFailureWhenHeadRowCountIsNotPositive()
         }
 
         if (!stderr.ToString().Contains("Row count must be a positive integer", StringComparison.Ordinal))
+        {
+            throw new Exception($"unexpected error output: {stderr}");
+        }
+    }
+    finally
+    {
+        File.Delete(tempPath);
+    }
+}
+
+static void CountsAllDataRows()
+{
+    var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
+    File.WriteAllText(tempPath, """
+        name,amount
+        Ada,10
+        Grace,20
+        Katherine,30
+        Barbara,40
+        Dorothy,50
+        Frances,60
+        Jean,70
+        Helen,80
+        Irene,90
+        Joan,100
+        """.ReplaceLineEndings("\r\n"));
+
+    try
+    {
+        using var output = new MemoryStream();
+        using var stderr = new StringWriter();
+        var exitCode = SliceApp.Run([tempPath, "count"], stderr, output);
+        if (exitCode != 0)
+        {
+            throw new Exception($"expected success, got exit code {exitCode}: {stderr}");
+        }
+
+        var result = Encoding.UTF8.GetString(output.ToArray());
+        var expected = $"10{Environment.NewLine}";
+        if (result != expected)
+        {
+            throw new Exception($"unexpected output: {result}");
+        }
+    }
+    finally
+    {
+        File.Delete(tempPath);
+    }
+}
+
+static void CountsRemainingRowsAfterFiltering()
+{
+    var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
+    File.WriteAllText(tempPath, """
+        name,age
+        Ada,36
+        Grace,29
+        Katherine,41
+        Barbara,32
+        Dorothy,25
+        """.ReplaceLineEndings("\r\n"));
+
+    try
+    {
+        using var output = new MemoryStream();
+        using var stderr = new StringWriter();
+        var exitCode = SliceApp.Run([tempPath, "where", "age>30", "count"], stderr, output);
+        if (exitCode != 0)
+        {
+            throw new Exception($"expected success, got exit code {exitCode}: {stderr}");
+        }
+
+        var result = Encoding.UTF8.GetString(output.ToArray());
+        var expected = $"3{Environment.NewLine}";
+        if (result != expected)
+        {
+            throw new Exception($"unexpected output: {result}");
+        }
+    }
+    finally
+    {
+        File.Delete(tempPath);
+    }
+}
+
+static void SumsANumericColumn()
+{
+    var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
+    File.WriteAllText(tempPath, """
+        name,amount
+        Ada,10.5
+        Grace,20
+        Katherine,30.25
+        """.ReplaceLineEndings("\r\n"));
+
+    try
+    {
+        using var output = new MemoryStream();
+        using var stderr = new StringWriter();
+        var exitCode = SliceApp.Run([tempPath, "sum", "amount"], stderr, output);
+        if (exitCode != 0)
+        {
+            throw new Exception($"expected success, got exit code {exitCode}: {stderr}");
+        }
+
+        var result = Encoding.UTF8.GetString(output.ToArray());
+        var expected = $"60.75{Environment.NewLine}";
+        if (result != expected)
+        {
+            throw new Exception($"unexpected output: {result}");
+        }
+    }
+    finally
+    {
+        File.Delete(tempPath);
+    }
+}
+
+static void ReturnsFailureWhenSumColumnValuesAreNonnumeric()
+{
+    var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
+    File.WriteAllText(tempPath, """
+        name,amount
+        Ada,10
+        Grace,NaN
+        Katherine,30
+        """.ReplaceLineEndings("\r\n"));
+
+    try
+    {
+        using var output = new MemoryStream();
+        using var stderr = new StringWriter();
+        var exitCode = SliceApp.Run([tempPath, "sum", "amount"], stderr, output);
+        if (exitCode == 0)
+        {
+            throw new Exception("expected non-zero exit code");
+        }
+
+        if (!stderr.ToString().Contains("All values in the target column must be numeric", StringComparison.Ordinal))
+        {
+            throw new Exception($"unexpected error output: {stderr}");
+        }
+    }
+    finally
+    {
+        File.Delete(tempPath);
+    }
+}
+
+static void ReturnsFailureWhenSumColumnIsMissing()
+{
+    var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
+    File.WriteAllText(tempPath, "name,amount\r\nAda,10\r\n");
+
+    try
+    {
+        using var output = new MemoryStream();
+        using var stderr = new StringWriter();
+        var exitCode = SliceApp.Run([tempPath, "sum", "total"], stderr, output);
+        if (exitCode == 0)
+        {
+            throw new Exception("expected non-zero exit code");
+        }
+
+        if (!stderr.ToString().Contains("Column not found: total", StringComparison.Ordinal))
         {
             throw new Exception($"unexpected error output: {stderr}");
         }
