@@ -11,6 +11,9 @@ var tests = new List<(string Name, Action Test)>
     ("filters text rows with where", FiltersTextRowsWithWhere),
     ("returns failure when a where column is missing", ReturnsFailureWhenWhereColumnIsMissing),
     ("returns failure when a where expression is invalid", ReturnsFailureWhenWhereExpressionIsInvalid),
+    ("keeps only the first five data rows with head", KeepsOnlyTheFirstFiveDataRowsWithHead),
+    ("keeps all rows when head exceeds row count", KeepsAllRowsWhenHeadExceedsRowCount),
+    ("returns failure when head row count is not positive", ReturnsFailureWhenHeadRowCountIsNotPositive),
     ("sorts numeric rows descending", SortsNumericRowsDescending),
     ("sorts rows ascending by default", SortsRowsAscendingByDefault),
     ("sorts text rows descending", SortsTextRowsDescending),
@@ -207,6 +210,97 @@ static void ReturnsFailureWhenWhereExpressionIsInvalid()
         }
 
         if (!stderr.ToString().Contains("Invalid comparison expression", StringComparison.Ordinal))
+        {
+            throw new Exception($"unexpected error output: {stderr}");
+        }
+    }
+    finally
+    {
+        File.Delete(tempPath);
+    }
+}
+
+static void KeepsOnlyTheFirstFiveDataRowsWithHead()
+{
+    var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
+    File.WriteAllText(tempPath, """
+        name,age
+        Ada,36
+        Grace,29
+        Katherine,41
+        Barbara,32
+        Dorothy,25
+        Frances,38
+        Jean,44
+        """.ReplaceLineEndings("\r\n"));
+
+    try
+    {
+        using var output = new MemoryStream();
+        using var stderr = new StringWriter();
+        var exitCode = SliceApp.Run([tempPath, "head", "5"], stderr, output);
+        if (exitCode != 0)
+        {
+            throw new Exception($"expected success, got exit code {exitCode}: {stderr}");
+        }
+
+        var result = Encoding.UTF8.GetString(output.ToArray());
+        var expected = $"name,age{Environment.NewLine}Ada,36{Environment.NewLine}Grace,29{Environment.NewLine}Katherine,41{Environment.NewLine}Barbara,32{Environment.NewLine}Dorothy,25{Environment.NewLine}";
+        if (result != expected)
+        {
+            throw new Exception($"unexpected output: {result}");
+        }
+    }
+    finally
+    {
+        File.Delete(tempPath);
+    }
+}
+
+static void KeepsAllRowsWhenHeadExceedsRowCount()
+{
+    var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
+    File.WriteAllText(tempPath, "name,age\r\nAda,36\r\nGrace,29\r\n");
+
+    try
+    {
+        using var output = new MemoryStream();
+        using var stderr = new StringWriter();
+        var exitCode = SliceApp.Run([tempPath, "head", "5"], stderr, output);
+        if (exitCode != 0)
+        {
+            throw new Exception($"expected success, got exit code {exitCode}: {stderr}");
+        }
+
+        var result = Encoding.UTF8.GetString(output.ToArray());
+        var expected = $"name,age{Environment.NewLine}Ada,36{Environment.NewLine}Grace,29{Environment.NewLine}";
+        if (result != expected)
+        {
+            throw new Exception($"unexpected output: {result}");
+        }
+    }
+    finally
+    {
+        File.Delete(tempPath);
+    }
+}
+
+static void ReturnsFailureWhenHeadRowCountIsNotPositive()
+{
+    var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
+    File.WriteAllText(tempPath, "name,age\r\nAda,36\r\n");
+
+    try
+    {
+        using var output = new MemoryStream();
+        using var stderr = new StringWriter();
+        var exitCode = SliceApp.Run([tempPath, "head", "0"], stderr, output);
+        if (exitCode == 0)
+        {
+            throw new Exception("expected non-zero exit code");
+        }
+
+        if (!stderr.ToString().Contains("Row count must be a positive integer", StringComparison.Ordinal))
         {
             throw new Exception($"unexpected error output: {stderr}");
         }

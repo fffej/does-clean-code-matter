@@ -49,6 +49,21 @@ public static class SliceApp
                 var direction = args.Length == 4 ? args[3] : "asc";
                 CsvRoundTripper.WriteSortedRows(args[0], columnName, direction, outputStream);
             }
+            else if (string.Equals(args[1], "head", StringComparison.Ordinal))
+            {
+                if (args.Length != 3)
+                {
+                    WriteUsage(stderr);
+                    return 1;
+                }
+
+                if (!int.TryParse(args[2], out var rowCount))
+                {
+                    throw new InvalidOperationException("Row count must be a positive integer");
+                }
+
+                CsvRoundTripper.WriteHeadRows(args[0], rowCount, outputStream);
+            }
             else
             {
                 WriteUsage(stderr);
@@ -69,6 +84,7 @@ public static class SliceApp
         stderr.WriteLine("Usage: slice <csv-file> select <column1,column2,...>");
         stderr.WriteLine("   or: slice <csv-file> where <column><operator><value>");
         stderr.WriteLine("   or: slice <csv-file> sort <column> [asc|desc]");
+        stderr.WriteLine("   or: slice <csv-file> head <positive-integer>");
     }
 }
 
@@ -221,6 +237,38 @@ public static class CsvRoundTripper
         foreach (var row in orderedRows)
         {
             writer.WriteLine(row.Line);
+        }
+
+        writer.Flush();
+    }
+
+    public static void WriteHeadRows(string path, int rowCount, Stream output)
+    {
+        if (rowCount <= 0)
+        {
+            throw new InvalidOperationException("Row count must be a positive integer");
+        }
+
+        using var reader = new StreamReader(File.OpenRead(path));
+        using var writer = new StreamWriter(output, leaveOpen: true)
+        {
+            NewLine = Environment.NewLine
+        };
+
+        var headerLine = reader.ReadLine() ?? throw new InvalidOperationException("CSV file is empty");
+        writer.WriteLine(headerLine);
+
+        var writtenRows = 0;
+        string? line;
+        while ((line = reader.ReadLine()) is not null && writtenRows < rowCount)
+        {
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
+            writer.WriteLine(line);
+            writtenRows++;
         }
 
         writer.Flush();
