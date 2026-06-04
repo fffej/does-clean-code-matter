@@ -37,6 +37,18 @@ public static class SliceApp
                 var expression = string.Join(' ', args.Skip(2));
                 CsvRoundTripper.WriteFilteredRows(args[0], expression, outputStream);
             }
+            else if (string.Equals(args[1], "sort", StringComparison.Ordinal))
+            {
+                if (args.Length is not 3 and not 4)
+                {
+                    WriteUsage(stderr);
+                    return 1;
+                }
+
+                var columnName = args[2];
+                var direction = args.Length == 4 ? args[3] : "asc";
+                CsvRoundTripper.WriteSortedRows(args[0], columnName, direction, outputStream);
+            }
             else
             {
                 WriteUsage(stderr);
@@ -56,6 +68,7 @@ public static class SliceApp
     {
         stderr.WriteLine("Usage: slice <csv-file> select <column1,column2,...>");
         stderr.WriteLine("   or: slice <csv-file> where <column><operator><value>");
+        stderr.WriteLine("   or: slice <csv-file> sort <column> [asc|desc]");
     }
 }
 
@@ -142,6 +155,77 @@ public static class CsvRoundTripper
         writer.Flush();
     }
 
+    public static void WriteSortedRows(string path, string columnName, string direction, Stream output)
+    {
+        var descending = ParseSortDirection(direction);
+
+        using var reader = new StreamReader(File.OpenRead(path));
+        using var writer = new StreamWriter(output, leaveOpen: true)
+        {
+            NewLine = Environment.NewLine
+        };
+
+        var headerLine = reader.ReadLine() ?? throw new InvalidOperationException("CSV file is empty");
+        var headers = ParseCsvLine(headerLine);
+        var headerIndexes = headers
+            .Select((header, index) => new { header, index })
+            .ToDictionary(x => x.header, x => x.index, StringComparer.Ordinal);
+
+        if (!headerIndexes.TryGetValue(columnName, out var sortColumnIndex))
+        {
+            throw new InvalidOperationException($"Column not found: {columnName}");
+        }
+
+        var rows = new List<SortableRow>();
+        var rowIndex = 0;
+        var allNumeric = true;
+
+        string? line;
+        while ((line = reader.ReadLine()) is not null)
+        {
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
+            var values = ParseCsvLine(line);
+            var sortValue = GetValue(values, sortColumnIndex);
+            if (!TryParseNumber(sortValue, out var numericSortValue))
+            {
+                allNumeric = false;
+            }
+
+            rows.Add(new SortableRow(
+                line,
+                sortValue,
+                numericSortValue,
+                rowIndex++));
+        }
+
+        writer.WriteLine(headerLine);
+
+        IEnumerable<SortableRow> orderedRows;
+        if (allNumeric)
+        {
+            orderedRows = descending
+                ? rows.OrderByDescending(row => row.NumericSortValue).ThenBy(row => row.OriginalIndex)
+                : rows.OrderBy(row => row.NumericSortValue).ThenBy(row => row.OriginalIndex);
+        }
+        else
+        {
+            orderedRows = descending
+                ? rows.OrderByDescending(row => row.SortValue, StringComparer.Ordinal).ThenBy(row => row.OriginalIndex)
+                : rows.OrderBy(row => row.SortValue, StringComparer.Ordinal).ThenBy(row => row.OriginalIndex);
+        }
+
+        foreach (var row in orderedRows)
+        {
+            writer.WriteLine(row.Line);
+        }
+
+        writer.Flush();
+    }
+
     private static string GetValue(IReadOnlyList<string> values, int index)
     {
         return index < values.Count ? values[index] : string.Empty;
@@ -183,6 +267,16 @@ public static class CsvRoundTripper
             System.Globalization.NumberStyles.Number,
             System.Globalization.CultureInfo.InvariantCulture,
             out number);
+    }
+
+    private static bool ParseSortDirection(string direction)
+    {
+        return direction switch
+        {
+            "asc" => false,
+            "desc" => true,
+            _ => throw new InvalidOperationException("Invalid sort direction")
+        };
     }
 
     private static ComparisonFilter ParseComparisonExpression(string expression)
@@ -284,4 +378,6 @@ public static class CsvRoundTripper
     }
 
     private readonly record struct ComparisonFilter(string ColumnName, ComparisonOperator Operator, string Value);
+
+    private readonly record struct SortableRow(string Line, string SortValue, decimal NumericSortValue, int OriginalIndex);
 }

@@ -11,6 +11,10 @@ var tests = new List<(string Name, Action Test)>
     ("filters text rows with where", FiltersTextRowsWithWhere),
     ("returns failure when a where column is missing", ReturnsFailureWhenWhereColumnIsMissing),
     ("returns failure when a where expression is invalid", ReturnsFailureWhenWhereExpressionIsInvalid),
+    ("sorts numeric rows descending", SortsNumericRowsDescending),
+    ("sorts rows ascending by default", SortsRowsAscendingByDefault),
+    ("sorts text rows descending", SortsTextRowsDescending),
+    ("returns failure when a sort column is missing", ReturnsFailureWhenSortColumnIsMissing),
 };
 
 var failures = 0;
@@ -203,6 +207,101 @@ static void ReturnsFailureWhenWhereExpressionIsInvalid()
         }
 
         if (!stderr.ToString().Contains("Invalid comparison expression", StringComparison.Ordinal))
+        {
+            throw new Exception($"unexpected error output: {stderr}");
+        }
+    }
+    finally
+    {
+        File.Delete(tempPath);
+    }
+}
+
+static void SortsNumericRowsDescending()
+{
+    var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
+    File.WriteAllText(tempPath, "name,age\r\nAda,36\r\nGrace,29\r\nKatherine,41\r\n");
+
+    try
+    {
+        using var output = new MemoryStream();
+        CsvRoundTripper.WriteSortedRows(tempPath, "age", "desc", output);
+
+        var result = Encoding.UTF8.GetString(output.ToArray());
+        var expected = $"name,age{Environment.NewLine}Katherine,41{Environment.NewLine}Ada,36{Environment.NewLine}Grace,29{Environment.NewLine}";
+        if (result != expected)
+        {
+            throw new Exception($"unexpected output: {result}");
+        }
+    }
+    finally
+    {
+        File.Delete(tempPath);
+    }
+}
+
+static void SortsRowsAscendingByDefault()
+{
+    var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
+    File.WriteAllText(tempPath, "name,age\r\nAda,36\r\nGrace,29\r\nKatherine,41\r\n");
+
+    try
+    {
+        using var output = new MemoryStream();
+        CsvRoundTripper.WriteSortedRows(tempPath, "age", "asc", output);
+
+        var result = Encoding.UTF8.GetString(output.ToArray());
+        var expected = $"name,age{Environment.NewLine}Grace,29{Environment.NewLine}Ada,36{Environment.NewLine}Katherine,41{Environment.NewLine}";
+        if (result != expected)
+        {
+            throw new Exception($"unexpected output: {result}");
+        }
+    }
+    finally
+    {
+        File.Delete(tempPath);
+    }
+}
+
+static void SortsTextRowsDescending()
+{
+    var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
+    File.WriteAllText(tempPath, "name,role\r\nAda,admin\r\nGrace,user\r\nKatherine,analyst\r\n");
+
+    try
+    {
+        using var output = new MemoryStream();
+        CsvRoundTripper.WriteSortedRows(tempPath, "role", "desc", output);
+
+        var result = Encoding.UTF8.GetString(output.ToArray());
+        var expected = $"name,role{Environment.NewLine}Grace,user{Environment.NewLine}Katherine,analyst{Environment.NewLine}Ada,admin{Environment.NewLine}";
+        if (result != expected)
+        {
+            throw new Exception($"unexpected output: {result}");
+        }
+    }
+    finally
+    {
+        File.Delete(tempPath);
+    }
+}
+
+static void ReturnsFailureWhenSortColumnIsMissing()
+{
+    var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
+    File.WriteAllText(tempPath, "name,age\r\nAda,36\r\n");
+
+    try
+    {
+        using var output = new MemoryStream();
+        using var stderr = new StringWriter();
+        var exitCode = SliceApp.Run([tempPath, "sort", "city"], stderr, output);
+        if (exitCode == 0)
+        {
+            throw new Exception("expected non-zero exit code");
+        }
+
+        if (!stderr.ToString().Contains("Column not found: city", StringComparison.Ordinal))
         {
             throw new Exception($"unexpected error output: {stderr}");
         }
