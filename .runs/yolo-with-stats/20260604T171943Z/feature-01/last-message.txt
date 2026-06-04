@@ -1,0 +1,22 @@
+Implemented the CSV round-trip feature.
+
+What changed:
+- The CLI now accepts a single CSV file path and streams its bytes back to stdout unchanged.
+- `slice data.csv` with no transformation now preserves:
+  - header row
+  - row order
+  - column order
+  - cell contents exactly
+- Added a focused regression test that verifies byte-for-byte round-trip behavior.
+
+Key files:
+- `/tmp/codex-implement-01.nDdj28/project/Program.cs:1`
+- `/tmp/codex-implement-01.nDdj28/project/Slice.csproj:1`
+- `/tmp/codex-implement-01.nDdj28/project/tests/Program.cs:1`
+- `/tmp/codex-implement-01.nDdj28/project/tests/Slice.Tests.csproj:1`
+
+Validation:
+- `dotnet build Slice.csproj`
+- `dotnet build tests/Slice.Tests.csproj`
+- `dotnet run --project tests/Slice.Tests.csproj`
+- Smoke-tested the CLI with a sample CSV file via `dotnet run --project Slice.csproj -- <file>`

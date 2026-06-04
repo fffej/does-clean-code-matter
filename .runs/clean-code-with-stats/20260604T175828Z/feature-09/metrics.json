@@ -1,0 +1,45 @@
+{
+  "agent_messages_observed": 17,
+  "apply_patch_calls_observed": 0,
+  "codex_exit_code": 0,
+  "commit_sha": "7ac85b5aedfd138f1eec5f888ffbb0cb1ff76608",
+  "duration_seconds": 434,
+  "event_count": 134,
+  "event_types": {
+    "item.completed": 74,
+    "item.started": 57,
+    "thread.started": 1,
+    "turn.completed": 1,
+    "turn.started": 1
+  },
+  "failed_shell_command_calls_observed": 10,
+  "feature": "09",
+  "file_change_calls_observed": 14,
+  "finished_at_utc": "2026-06-04T18:30:42Z",
+  "function_call_names": {
+    "command_execution": 43,
+    "file_change": 14
+  },
+  "function_calls_observed": 57,
+  "git_churn": 665,
+  "git_deletions": 165,
+  "git_files_changed": 5,
+  "git_insertions": 500,
+  "last_message_excerpt": "Implemented output-format support end to end.\n\n- CLI parsing now accepts `--format csv|json|table` and defaults to `csv` in [`src/Slice/SliceApplication.cs`](#L5-L181).\n- Command execution now returns internal result objects instead of writing directly, so the computed data stays the same while rendering changes in [`src/Slice/CsvColumnSelector.cs`](#L32-L403) and [`src/Slice/QueryResult.cs`](#L3-L20).\n- Rendering is centralized in [`src/Slice/OutputRenderer.cs`](#L14-L198):\n  - `csv` renders tabular results with headers\n  - `json` renders tabular results as arrays of objects\n  - `table` renders a human-readable table\n  - scalar aggregates stay single-value outputs unless the format needs structure\n- Updated and added tests for grouped headers plus `json` and `table` rendering in [`tests/Slice.Tests/SliceApplicationTests.cs`](#L283-L1019).\n\nValidation:\n- `dotnet build src/Slice/Slice.csproj --no-restore`\n- `dotnet test tests/Slice.Tests/Slice.Tests.csproj --no-restore`",
+  "session_id": "019e93e0-43de-78d0-bdaa-36043a7b9652",
+  "shell_command_calls_observed": 43,
+  "spec_path": "specs/FEATURE_09.md",
+  "started_at_utc": "2026-06-04T18:23:28Z",
+  "token_maxima_observed": {
+    "cached_input_tokens": 2843776,
+    "input_tokens": 2918667,
+    "output_tokens": 26049,
+    "reasoning_output_tokens": 12428
+  },
+  "token_sums_observed": {
+    "cached_input_tokens": 2843776,
+    "input_tokens": 2918667,
+    "output_tokens": 26049,
+    "reasoning_output_tokens": 12428
+  }
+}

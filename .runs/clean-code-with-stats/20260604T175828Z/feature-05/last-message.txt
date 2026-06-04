@@ -1,0 +1,19 @@
+Implemented `head <count>` end-to-end.
+
+Changed:
+- [src/Slice/SliceApplication.cs](/tmp/codex-implement-05.DkAw81/project/src/Slice/SliceApplication.cs)
+- [src/Slice/CsvColumnSelector.cs](/tmp/codex-implement-05.DkAw81/project/src/Slice/CsvColumnSelector.cs)
+- [tests/Slice.Tests/SliceApplicationTests.cs](/tmp/codex-implement-05.DkAw81/project/tests/Slice.Tests/SliceApplicationTests.cs)
+
+What it does:
+- Adds `slice <csv-file> head <count>`.
+- Preserves the header row.
+- Streams only the first `N` data rows in original order.
+- Outputs all rows if the file has fewer than `N` data rows.
+- Fails with an error for zero or negative counts.
+- Updates usage text to include `head`.
+
+Verification:
+- `dotnet test tests/Slice.Tests/Slice.Tests.csproj` passed
+- `dotnet build src/Slice/Slice.csproj` passed
+- `dotnet build Slice.sln` returned a solution-level failure without diagnostics in this environment, but the app project itself builds cleanly

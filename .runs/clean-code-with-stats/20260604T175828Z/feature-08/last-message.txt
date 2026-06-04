@@ -1,0 +1,18 @@
+Implemented `groupby` end to end.
+
+What changed:
+- Added `groupby` to command parsing and usage text in [SliceApplication.cs](/tmp/codex-implement-08.NqlBin/project/src/Slice/SliceApplication.cs#L5).
+- Added grouped aggregation support in [CsvColumnSelector.cs](/tmp/codex-implement-08.NqlBin/project/src/Slice/CsvColumnSelector.cs#L361):
+  - `groupby <column> count`
+  - `groupby <column> sum <column>`
+  - preserves first-seen group order
+  - errors when any referenced column is missing
+  - errors when `sum` sees a non-numeric value
+  - emits data rows only, with no header row
+  - formats summed decimals canonically, so `10.00` prints as `10`
+- Added focused tests for success and failure cases in [SliceApplicationTests.cs](/tmp/codex-implement-08.NqlBin/project/tests/Slice.Tests/SliceApplicationTests.cs#L283).
+
+Verification:
+- `dotnet build src/Slice/Slice.csproj` passed
+- `dotnet test Slice.sln` passed
+

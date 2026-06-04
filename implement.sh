@@ -150,6 +150,9 @@ event_types = Counter()
 function_calls = 0
 function_call_names = Counter()
 command_calls = 0
+failed_command_calls = 0
+file_change_calls = 0
+agent_messages = 0
 apply_patch_calls = 0
 token_sums = Counter()
 token_maxima = Counter()
@@ -200,6 +203,22 @@ with events_path.open("r", encoding="utf-8", errors="replace") as events:
 
         session_id = session_id or first_string(event.get("session_id"), event.get("sessionId"))
 
+        item = event.get("item")
+        if event_type == "item.completed" and isinstance(item, dict):
+            item_type = first_string(item.get("type")) or "unknown"
+            if item_type == "command_execution":
+                function_calls += 1
+                command_calls += 1
+                function_call_names["command_execution"] += 1
+                if item.get("status") != "completed" or item.get("exit_code") not in (0, None):
+                    failed_command_calls += 1
+            elif item_type == "file_change":
+                function_calls += 1
+                file_change_calls += 1
+                function_call_names["file_change"] += 1
+            elif item_type == "agent_message":
+                agent_messages += 1
+
         for obj in walk(event):
             obj_type = first_string(obj.get("type"), obj.get("event"), obj.get("name"))
             if obj_type:
@@ -209,15 +228,11 @@ with events_path.open("r", encoding="utf-8", errors="replace") as events:
                     name = first_string(obj.get("name"), obj.get("tool_name"), obj.get("recipient_name"))
                     if name:
                         function_call_names[name] += 1
-                if lowered in {"exec", "exec_command", "shell_command"} or "exec_command" in lowered:
-                    command_calls += 1
                 if "apply_patch" in lowered:
                     apply_patch_calls += 1
 
             name = first_string(obj.get("name"), obj.get("tool_name"), obj.get("recipient_name"))
             if name:
-                if "exec" in name:
-                    command_calls += 1
                 if "apply_patch" in name:
                     apply_patch_calls += 1
 
@@ -262,6 +277,9 @@ metrics = {
     "function_calls_observed": function_calls,
     "function_call_names": dict(sorted(function_call_names.items())),
     "shell_command_calls_observed": command_calls,
+    "failed_shell_command_calls_observed": failed_command_calls,
+    "file_change_calls_observed": file_change_calls,
+    "agent_messages_observed": agent_messages,
     "apply_patch_calls_observed": apply_patch_calls,
     "token_maxima_observed": dict(sorted(token_maxima.items())),
     "token_sums_observed": dict(sorted(token_sums.items())),
@@ -384,6 +402,9 @@ totals = {
     "event_count": sum(row.get("event_count", 0) for row in rows),
     "function_calls_observed": sum(row.get("function_calls_observed", 0) for row in rows),
     "shell_command_calls_observed": sum(row.get("shell_command_calls_observed", 0) for row in rows),
+    "failed_shell_command_calls_observed": sum(row.get("failed_shell_command_calls_observed", 0) for row in rows),
+    "file_change_calls_observed": sum(row.get("file_change_calls_observed", 0) for row in rows),
+    "agent_messages_observed": sum(row.get("agent_messages_observed", 0) for row in rows),
     "apply_patch_calls_observed": sum(row.get("apply_patch_calls_observed", 0) for row in rows),
     "git_files_changed": sum(row.get("git_files_changed", 0) for row in rows),
     "git_insertions": sum(row.get("git_insertions", 0) for row in rows),

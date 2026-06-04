@@ -1,0 +1,45 @@
+{
+  "agent_messages_observed": 12,
+  "apply_patch_calls_observed": 0,
+  "codex_exit_code": 0,
+  "commit_sha": "f71a303ea642b528b5cfc7a6a2c7a86fd88ebb05",
+  "duration_seconds": 208,
+  "event_count": 71,
+  "event_types": {
+    "item.completed": 40,
+    "item.started": 28,
+    "thread.started": 1,
+    "turn.completed": 1,
+    "turn.started": 1
+  },
+  "failed_shell_command_calls_observed": 3,
+  "feature": "08",
+  "file_change_calls_observed": 6,
+  "finished_at_utc": "2026-06-04T18:23:28Z",
+  "function_call_names": {
+    "command_execution": 22,
+    "file_change": 6
+  },
+  "function_calls_observed": 28,
+  "git_churn": 373,
+  "git_deletions": 3,
+  "git_files_changed": 3,
+  "git_insertions": 370,
+  "last_message_excerpt": "Implemented `groupby` end to end.\n\nWhat changed:\n- Added `groupby` to command parsing and usage text in [SliceApplication.cs](/tmp/codex-implement-08.NqlBin/project/src/Slice/SliceApplication.cs#L5).\n- Added grouped aggregation support in [CsvColumnSelector.cs](/tmp/codex-implement-08.NqlBin/project/src/Slice/CsvColumnSelector.cs#L361):\n  - `groupby <column> count`\n  - `groupby <column> sum <column>`\n  - preserves first-seen group order\n  - errors when any referenced column is missing\n  - errors when `sum` sees a non-numeric value\n  - emits data rows only, with no header row\n  - formats summed decimals canonically, so `10.00` prints as `10`\n- Added focused tests for success and failure cases in [SliceApplicationTests.cs](/tmp/codex-implement-08.NqlBin/project/tests/Slice.Tests/SliceApplicationTests.cs#L283).\n\nVerification:\n- `dotnet build src/Slice/Slice.csproj` passed\n- `dotnet test Slice.sln` passed\n\n",
+  "session_id": "019e93dd-1863-7c33-9ed8-6d48ad618d8a",
+  "shell_command_calls_observed": 22,
+  "spec_path": "specs/FEATURE_08.md",
+  "started_at_utc": "2026-06-04T18:20:00Z",
+  "token_maxima_observed": {
+    "cached_input_tokens": 745856,
+    "input_tokens": 835277,
+    "output_tokens": 11788,
+    "reasoning_output_tokens": 4931
+  },
+  "token_sums_observed": {
+    "cached_input_tokens": 745856,
+    "input_tokens": 835277,
+    "output_tokens": 11788,
+    "reasoning_output_tokens": 4931
+  }
+}

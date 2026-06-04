@@ -1,0 +1,45 @@
+{
+  "agent_messages_observed": 12,
+  "apply_patch_calls_observed": 0,
+  "codex_exit_code": 0,
+  "commit_sha": "21c5b2d212e1ad82119fbddaebbe01f9302dc649",
+  "duration_seconds": 144,
+  "event_count": 57,
+  "event_types": {
+    "item.completed": 33,
+    "item.started": 21,
+    "thread.started": 1,
+    "turn.completed": 1,
+    "turn.started": 1
+  },
+  "failed_shell_command_calls_observed": 2,
+  "feature": "04",
+  "file_change_calls_observed": 5,
+  "finished_at_utc": "2026-06-04T18:12:08Z",
+  "function_call_names": {
+    "command_execution": 16,
+    "file_change": 5
+  },
+  "function_calls_observed": 21,
+  "git_churn": 336,
+  "git_deletions": 6,
+  "git_files_changed": 3,
+  "git_insertions": 330,
+  "last_message_excerpt": "Implemented sorting support.\n\nWhat changed:\n- `src/Slice/SliceApplication.cs` now accepts `sort <column> [asc|desc]` and updates the usage text accordingly.\n- `src/Slice/CsvColumnSelector.cs` now:\n  - reads the full CSV table,\n  - validates the sort column exists,\n  - sorts numerically when every value in that column is numeric,\n  - otherwise sorts as text,\n  - keeps the header row first,\n  - preserves all data rows.\n- `tests/Slice.Tests/SliceApplicationTests.cs` now covers:\n  - numeric sort descending,\n  - default ascending sort,\n  - text sorting,\n  - missing sort column failure.\n\nValidation:\n- `dotnet test Slice.sln` passed.\n- `dotnet build src/Slice/Slice.csproj` passed.\n- `dotnet build tests/Slice.Tests/Slice.Tests.csproj` passed.",
+  "session_id": "019e93d3-b0aa-74a0-b39b-35a6587a6a4b",
+  "shell_command_calls_observed": 16,
+  "spec_path": "specs/FEATURE_04.md",
+  "started_at_utc": "2026-06-04T18:09:44Z",
+  "token_maxima_observed": {
+    "cached_input_tokens": 429824,
+    "input_tokens": 461328,
+    "output_tokens": 11035,
+    "reasoning_output_tokens": 4784
+  },
+  "token_sums_observed": {
+    "cached_input_tokens": 429824,
+    "input_tokens": 461328,
+    "output_tokens": 11035,
+    "reasoning_output_tokens": 4784
+  }
+}

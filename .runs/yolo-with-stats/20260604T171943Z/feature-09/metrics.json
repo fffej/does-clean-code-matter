@@ -1,0 +1,45 @@
+{
+  "agent_messages_observed": 11,
+  "apply_patch_calls_observed": 0,
+  "codex_exit_code": 0,
+  "commit_sha": "52b1611b31616b64f6beb348721f6310a5a4bdbe",
+  "duration_seconds": 449,
+  "event_count": 96,
+  "event_types": {
+    "item.completed": 52,
+    "item.started": 41,
+    "thread.started": 1,
+    "turn.completed": 1,
+    "turn.started": 1
+  },
+  "failed_shell_command_calls_observed": 1,
+  "feature": "09",
+  "file_change_calls_observed": 13,
+  "finished_at_utc": "2026-06-04T17:49:38Z",
+  "function_call_names": {
+    "command_execution": 28,
+    "file_change": 13
+  },
+  "function_calls_observed": 41,
+  "git_churn": 428,
+  "git_deletions": 146,
+  "git_files_changed": 2,
+  "git_insertions": 282,
+  "last_message_excerpt": "Implemented in [Program.cs](/tmp/codex-implement-09.YCETnS/project/Program.cs) and [tests/Program.cs](/tmp/codex-implement-09.YCETnS/project/tests/Program.cs).\n\nWhat changed:\n- Added global `--format csv|json|table` parsing.\n- Kept all computation paths the same; only the final renderer changes.\n- `csv` remains the default.\n- Tabular results now render as:\n  - CSV with headers\n  - JSON arrays of objects\n  - readable ASCII tables\n- Scalar aggregates (`count`, `sum`) render as a single value in all formats.\n\nVerification:\n- `dotnet build`\n- `dotnet build tests/Slice.Tests.csproj`\n- `dotnet run --project tests/Slice.Tests.csproj`",
+  "session_id": "019e93ba-6e64-7a50-9b50-e031bf14112c",
+  "shell_command_calls_observed": 28,
+  "spec_path": "specs/FEATURE_09.md",
+  "started_at_utc": "2026-06-04T17:42:09Z",
+  "token_maxima_observed": {
+    "cached_input_tokens": 2362112,
+    "input_tokens": 2500757,
+    "output_tokens": 32354,
+    "reasoning_output_tokens": 13398
+  },
+  "token_sums_observed": {
+    "cached_input_tokens": 2362112,
+    "input_tokens": 2500757,
+    "output_tokens": 32354,
+    "reasoning_output_tokens": 13398
+  }
+}

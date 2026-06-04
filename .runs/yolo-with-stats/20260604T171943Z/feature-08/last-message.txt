@@ -1,0 +1,13 @@
+Implemented `groupby` end to end.
+
+What changed:
+- Added parsing for `groupby <column> count` and `groupby <column> sum <column>` in [/tmp/codex-implement-08.vVtJ8w/project/Program.cs:156](...) .
+- Added execution for grouped count and grouped sum, preserving first-seen group order and failing on missing columns or nonnumeric sum values in [/tmp/codex-implement-08.vVtJ8w/project/Program.cs:268](...) and [/tmp/codex-implement-08.vVtJ8w/project/Program.cs:332](...) .
+- Updated command usage/help text and keyword recognition in [/tmp/codex-implement-08.vVtJ8w/project/Program.cs:600](...) and [/tmp/codex-implement-08.vVtJ8w/project/Program.cs:753](...) .
+- Added focused coverage for grouped count, grouped sum, and missing-column failure in [/tmp/codex-implement-08.vVtJ8w/project/tests/Program.cs:22](...) and [/tmp/codex-implement-08.vVtJ8w/project/tests/Program.cs:490](...) .
+
+Validation:
+- `dotnet build Slice.csproj`
+- `dotnet run --project tests/Slice.Tests.csproj`
+
+The new grouped output uses the group column as the first header and `count` or `sum` as the second header.

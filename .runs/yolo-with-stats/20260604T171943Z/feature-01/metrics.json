@@ -1,0 +1,45 @@
+{
+  "agent_messages_observed": 10,
+  "apply_patch_calls_observed": 0,
+  "codex_exit_code": 0,
+  "commit_sha": "863ca4442ebac136c02c86669f9a927b001aa9f8",
+  "duration_seconds": 183,
+  "event_count": 49,
+  "event_types": {
+    "item.completed": 28,
+    "item.started": 18,
+    "thread.started": 1,
+    "turn.completed": 1,
+    "turn.started": 1
+  },
+  "failed_shell_command_calls_observed": 2,
+  "feature": "01",
+  "file_change_calls_observed": 8,
+  "finished_at_utc": "2026-06-04T17:22:46Z",
+  "function_call_names": {
+    "command_execution": 10,
+    "file_change": 8
+  },
+  "function_calls_observed": 18,
+  "git_churn": 138,
+  "git_deletions": 0,
+  "git_files_changed": 6,
+  "git_insertions": 138,
+  "last_message_excerpt": "Implemented the CSV round-trip feature.\n\nWhat changed:\n- The CLI now accepts a single CSV file path and streams its bytes back to stdout unchanged.\n- `slice data.csv` with no transformation now preserves:\n  - header row\n  - row order\n  - column order\n  - cell contents exactly\n- Added a focused regression test that verifies byte-for-byte round-trip behavior.\n\nKey files:\n- `/tmp/codex-implement-01.nDdj28/project/Program.cs:1`\n- `/tmp/codex-implement-01.nDdj28/project/Slice.csproj:1`\n- `/tmp/codex-implement-01.nDdj28/project/tests/Program.cs:1`\n- `/tmp/codex-implement-01.nDdj28/project/tests/Slice.Tests.csproj:1`\n\nValidation:\n- `dotnet build Slice.csproj`\n- `dotnet build tests/Slice.Tests.csproj`\n- `dotnet run --project tests/Slice.Tests.csproj`\n- Smoke-tested the CLI with a sample CSV file via `dotnet run --project Slice.csproj -- <file>`",
+  "session_id": "019e93a5-e8ad-7c32-8cb5-7c10a817cd2d",
+  "shell_command_calls_observed": 10,
+  "spec_path": "specs/FEATURE_01.md",
+  "started_at_utc": "2026-06-04T17:19:43Z",
+  "token_maxima_observed": {
+    "cached_input_tokens": 508032,
+    "input_tokens": 538743,
+    "output_tokens": 7781,
+    "reasoning_output_tokens": 4137
+  },
+  "token_sums_observed": {
+    "cached_input_tokens": 508032,
+    "input_tokens": 538743,
+    "output_tokens": 7781,
+    "reasoning_output_tokens": 4137
+  }
+}

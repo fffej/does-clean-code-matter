@@ -1,0 +1,16 @@
+Implemented column selection end to end.
+
+- `SliceApplication` now expects `slice <csv-file> select <columns>` and routes CSV processing through a dedicated selector helper: [`src/Slice/SliceApplication.cs`](sandbox:/tmp/codex-implement-02.IAyORk/project/src/Slice/SliceApplication.cs#L3)
+- Added CSV column parsing, validation, projection, and CSV escaping in a small internal helper: [`src/Slice/CsvColumnSelector.cs`](sandbox:/tmp/codex-implement-02.IAyORk/project/src/Slice/CsvColumnSelector.cs#L6)
+- Updated tests to cover:
+  - selecting columns in the requested order
+  - missing-column failure
+  - missing-file failure
+  - usage validation: [`tests/Slice.Tests/SliceApplicationTests.cs`](sandbox:/tmp/codex-implement-02.IAyORk/project/tests/Slice.Tests/SliceApplicationTests.cs#L7)
+
+Checks:
+- `dotnet build src/Slice/Slice.csproj` passed
+- `dotnet build tests/Slice.Tests/Slice.Tests.csproj` passed
+- `dotnet test Slice.sln` passed
+
+One note: `dotnet build Slice.sln` exits nonzero without surfacing compiler diagnostics in this workspace, but the individual project builds and the test run are green.

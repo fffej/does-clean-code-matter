@@ -1,0 +1,45 @@
+{
+  "agent_messages_observed": 11,
+  "apply_patch_calls_observed": 0,
+  "codex_exit_code": 0,
+  "commit_sha": "0f8a10854e0e42761445dcd0c491d086c6d93a82",
+  "duration_seconds": 214,
+  "event_count": 60,
+  "event_types": {
+    "item.completed": 34,
+    "item.started": 23,
+    "thread.started": 1,
+    "turn.completed": 1,
+    "turn.started": 1
+  },
+  "failed_shell_command_calls_observed": 1,
+  "feature": "03",
+  "file_change_calls_observed": 6,
+  "finished_at_utc": "2026-06-04T18:09:44Z",
+  "function_call_names": {
+    "command_execution": 17,
+    "file_change": 6
+  },
+  "function_calls_observed": 23,
+  "git_churn": 327,
+  "git_deletions": 13,
+  "git_files_changed": 3,
+  "git_insertions": 314,
+  "last_message_excerpt": "t` and `where` commands and returns a clearer usage message for invalid invocations: [src/Slice/SliceApplication.cs](file:///tmp/codex-implement-03.CREC2J/project/src/Slice/SliceApplication.cs#L15-L54)\n- `CsvTableProcessor` now handles both column selection and comparison filtering, including:\n  - `=`, `!=`, `>`, `<`, `>=`, `<=`\n  - case-insensitive header lookup\n  - numeric comparison when both sides parse as numbers\n  - text comparison otherwise\n  - header preservation and input row order preservation: [src/Slice/CsvColumnSelector.cs](file:///tmp/codex-implement-03.CREC2J/project/src/Slice/CsvColumnSelector.cs#L81-L248)\n- Added focused tests for:\n  - numeric filtering\n  - text filtering\n  - no-match behavior preserving the header\n  - usage handling and existing select behavior: [tests/Slice.Tests/SliceApplicationTests.cs](file:///tmp/codex-implement-03.CREC2J/project/tests/Slice.Tests/SliceApplicationTests.cs#L112-L231)\n\nValidation:\n- `dotnet test Slice.sln` passed, 7/7 tests passed.",
+  "session_id": "019e93d0-6dd4-7141-b593-00bc6734a52a",
+  "shell_command_calls_observed": 17,
+  "spec_path": "specs/FEATURE_03.md",
+  "started_at_utc": "2026-06-04T18:06:10Z",
+  "token_maxima_observed": {
+    "cached_input_tokens": 740224,
+    "input_tokens": 778179,
+    "output_tokens": 15391,
+    "reasoning_output_tokens": 7032
+  },
+  "token_sums_observed": {
+    "cached_input_tokens": 740224,
+    "input_tokens": 778179,
+    "output_tokens": 15391,
+    "reasoning_output_tokens": 7032
+  }
+}

@@ -1,0 +1,45 @@
+You are implementing one feature in an isolated C#/.NET project workspace.
+
+Hard constraints:
+- Use C# and .NET for the implementation.
+- Work only in the current working directory.
+- Do not read or inspect parent directories, sibling directories, repository root files, or any path outside this workspace.
+- Do not use git. The wrapper script will commit after you finish.
+- Do not implement future specs unless doing so is strictly necessary to keep the current feature coherent.
+- Preserve and build on the existing code in this workspace.
+- Prefer the standard .NET SDK and avoid third-party NuGet packages unless the project already uses them.
+- Add or update focused tests where practical.
+- Run relevant dotnet build/test checks before finishing.
+
+Style/how prompt:
+Implement this with pure unhindered vibe coding. If in doubt? YOLO!
+
+Current feature spec:
+# Feature 4: Sorting
+
+## Feature
+
+The program can sort rows by a column.
+
+## Command
+
+```sh
+slice data.csv sort age desc
+```
+
+## Behavior
+
+- The `sort` command orders rows by the values in a named column.
+- Sort direction may be `asc` or `desc`.
+- If no direction is provided, ascending order is used.
+- Numeric sorting is used when all values in the sort column are numeric.
+- Otherwise, values are sorted as text.
+- The header row remains first in CSV output.
+- All data rows are included unless another command removes them.
+- If the sort column does not exist, the command fails with an error.
+
+## Acceptance Criteria
+
+Given rows with an `age` column, running `sort age desc` outputs all rows ordered from highest age to lowest age.
+
+Implement this feature completely. Leave the workspace containing the finished project files.

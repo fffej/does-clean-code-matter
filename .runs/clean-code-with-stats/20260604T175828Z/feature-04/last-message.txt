@@ -1,0 +1,21 @@
+Implemented sorting support.
+
+What changed:
+- `src/Slice/SliceApplication.cs` now accepts `sort <column> [asc|desc]` and updates the usage text accordingly.
+- `src/Slice/CsvColumnSelector.cs` now:
+  - reads the full CSV table,
+  - validates the sort column exists,
+  - sorts numerically when every value in that column is numeric,
+  - otherwise sorts as text,
+  - keeps the header row first,
+  - preserves all data rows.
+- `tests/Slice.Tests/SliceApplicationTests.cs` now covers:
+  - numeric sort descending,
+  - default ascending sort,
+  - text sorting,
+  - missing sort column failure.
+
+Validation:
+- `dotnet test Slice.sln` passed.
+- `dotnet build src/Slice/Slice.csproj` passed.
+- `dotnet build tests/Slice.Tests/Slice.Tests.csproj` passed.

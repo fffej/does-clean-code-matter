@@ -1,0 +1,14 @@
+Implemented output-format support end to end.
+
+- CLI parsing now accepts `--format csv|json|table` and defaults to `csv` in [`src/Slice/SliceApplication.cs`](#L5-L181).
+- Command execution now returns internal result objects instead of writing directly, so the computed data stays the same while rendering changes in [`src/Slice/CsvColumnSelector.cs`](#L32-L403) and [`src/Slice/QueryResult.cs`](#L3-L20).
+- Rendering is centralized in [`src/Slice/OutputRenderer.cs`](#L14-L198):
+  - `csv` renders tabular results with headers
+  - `json` renders tabular results as arrays of objects
+  - `table` renders a human-readable table
+  - scalar aggregates stay single-value outputs unless the format needs structure
+- Updated and added tests for grouped headers plus `json` and `table` rendering in [`tests/Slice.Tests/SliceApplicationTests.cs`](#L283-L1019).
+
+Validation:
+- `dotnet build src/Slice/Slice.csproj --no-restore`
+- `dotnet test tests/Slice.Tests/Slice.Tests.csproj --no-restore`

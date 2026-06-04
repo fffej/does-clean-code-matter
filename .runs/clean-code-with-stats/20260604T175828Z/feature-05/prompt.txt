@@ -1,0 +1,43 @@
+You are implementing one feature in an isolated C#/.NET project workspace.
+
+Hard constraints:
+- Use C# and .NET for the implementation.
+- Work only in the current working directory.
+- Do not read or inspect parent directories, sibling directories, repository root files, or any path outside this workspace.
+- Do not use git. The wrapper script will commit after you finish.
+- Do not implement future specs unless doing so is strictly necessary to keep the current feature coherent.
+- Preserve and build on the existing code in this workspace.
+- Prefer the standard .NET SDK and avoid third-party NuGet packages unless the project already uses them.
+- Add or update focused tests where practical.
+- Run relevant dotnet build/test checks before finishing.
+
+Style/how prompt:
+Implement this with adherence to Clean Code principles. Ensure that code adheres to the SOLID principles. Do NOT repeat yourself. Make the change easy, then make the change.
+
+Current feature spec:
+# Feature 5: Limit Rows
+
+## Feature
+
+The program can output only the first `N` rows.
+
+## Command
+
+```sh
+slice data.csv head 5
+```
+
+## Behavior
+
+- The `head` command takes a positive integer.
+- It keeps the first `N` data rows.
+- Row order is preserved.
+- The header row is preserved in CSV output.
+- If fewer than `N` rows exist, all rows are output.
+- If `N` is zero or negative, the command fails with an error.
+
+## Acceptance Criteria
+
+Given a CSV file with more than five data rows, running `head 5` outputs the header and the first five data rows.
+
+Implement this feature completely. Leave the workspace containing the finished project files.

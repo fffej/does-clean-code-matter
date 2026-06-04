@@ -1,0 +1,7 @@
+{
+  "model": "gpt-5.4-mini",
+  "prompt_source": "YOLO.md",
+  "run_id": "20260604T171943Z",
+  "started_at_utc": "2026-06-04T17:19:43Z",
+  "target_dir": "yolo-with-stats"
+}

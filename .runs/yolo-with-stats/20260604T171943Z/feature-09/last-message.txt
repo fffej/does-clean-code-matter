@@ -1,0 +1,16 @@
+Implemented in [Program.cs](/tmp/codex-implement-09.YCETnS/project/Program.cs) and [tests/Program.cs](/tmp/codex-implement-09.YCETnS/project/tests/Program.cs).
+
+What changed:
+- Added global `--format csv|json|table` parsing.
+- Kept all computation paths the same; only the final renderer changes.
+- `csv` remains the default.
+- Tabular results now render as:
+  - CSV with headers
+  - JSON arrays of objects
+  - readable ASCII tables
+- Scalar aggregates (`count`, `sum`) render as a single value in all formats.
+
+Verification:
+- `dotnet build`
+- `dotnet build tests/Slice.Tests.csproj`
+- `dotnet run --project tests/Slice.Tests.csproj`

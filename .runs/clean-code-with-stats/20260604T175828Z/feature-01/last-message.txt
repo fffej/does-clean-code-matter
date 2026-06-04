@@ -1,0 +1,21 @@
+Implemented the round-trip CSV behavior as a direct file-to-stdout copy, which preserves headers, row order, column order, and cell values exactly.
+
+Key changes:
+- `slice` now accepts one file path and streams the CSV bytes unchanged to standard output.
+- Basic argument validation returns a usage error when no file is supplied and a file-not-found error when the path is invalid.
+- Focused tests cover:
+  - exact byte-for-byte round trip of a CSV file
+  - missing file handling
+  - no-argument usage handling
+- I also pinned the SDK with `global.json` to the installed `9.0.311` toolchain to keep builds aligned with this workspace.
+
+References:
+- App entry and I/O flow: [src/Slice/Program.cs](/tmp/codex-implement-01.0MnPRI/project/src/Slice/Program.cs#L3), [src/Slice/SliceApplication.cs](/tmp/codex-implement-01.0MnPRI/project/src/Slice/SliceApplication.cs#L5)
+- Tests: [tests/Slice.Tests/SliceApplicationTests.cs](/tmp/codex-implement-01.0MnPRI/project/tests/Slice.Tests/SliceApplicationTests.cs#L7)
+- SDK pin: [global.json](/tmp/codex-implement-01.0MnPRI/project/global.json#L1)
+
+Verification:
+- `dotnet build src/Slice/Slice.csproj`
+- `dotnet test tests/Slice.Tests/Slice.Tests.csproj`
+
+If you want, I can next look into why `dotnet build Slice.sln` still fails in this environment.

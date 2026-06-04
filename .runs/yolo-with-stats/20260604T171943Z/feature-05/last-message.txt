@@ -1,0 +1,12 @@
+Implemented `head` support end to end.
+
+- CLI dispatch and usage updated in [`/tmp/codex-implement-05.7GPVtZ/project/Program.cs`](file:///tmp/codex-implement-05.7GPVtZ/project/Program.cs#L13-L88).
+- Streaming row-limiting helper added in [`/tmp/codex-implement-05.7GPVtZ/project/Program.cs`](file:///tmp/codex-implement-05.7GPVtZ/project/Program.cs#L245-L275).
+- Focused coverage added in [`/tmp/codex-implement-05.7GPVtZ/project/tests/Program.cs`](file:///tmp/codex-implement-05.7GPVtZ/project/tests/Program.cs#L14-L16), [`/tmp/codex-implement-05.7GPVtZ/project/tests/Program.cs`](file:///tmp/codex-implement-05.7GPVtZ/project/tests/Program.cs#L223-L312).
+
+Validation ran clean:
+- `dotnet build Slice.csproj`
+- `dotnet build tests/Slice.Tests.csproj`
+- `dotnet run --project tests/Slice.Tests.csproj`
+
+If you want, I can also add a small sample CSV/output fixture for manual CLI smoke testing.

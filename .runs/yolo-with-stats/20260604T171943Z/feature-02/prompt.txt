@@ -1,0 +1,42 @@
+You are implementing one feature in an isolated C#/.NET project workspace.
+
+Hard constraints:
+- Use C# and .NET for the implementation.
+- Work only in the current working directory.
+- Do not read or inspect parent directories, sibling directories, repository root files, or any path outside this workspace.
+- Do not use git. The wrapper script will commit after you finish.
+- Do not implement future specs unless doing so is strictly necessary to keep the current feature coherent.
+- Preserve and build on the existing code in this workspace.
+- Prefer the standard .NET SDK and avoid third-party NuGet packages unless the project already uses them.
+- Add or update focused tests where practical.
+- Run relevant dotnet build/test checks before finishing.
+
+Style/how prompt:
+Implement this with pure unhindered vibe coding. If in doubt? YOLO!
+
+Current feature spec:
+# Feature 2: Column Selection
+
+## Feature
+
+The program can output only selected columns from the input data.
+
+## Command
+
+```sh
+slice data.csv select name,age
+```
+
+## Behavior
+
+- The `select` command takes a comma-separated list of column names.
+- Only the named columns are included in the output.
+- Columns appear in the order specified by the command.
+- Rows remain in their original order.
+- If a selected column does not exist, the command fails with an error.
+
+## Acceptance Criteria
+
+Given a CSV file with columns `name`, `age`, and `city`, running `select name,age` outputs only the `name` and `age` columns, in that order.
+
+Implement this feature completely. Leave the workspace containing the finished project files.

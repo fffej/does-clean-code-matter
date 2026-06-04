@@ -1,0 +1,50 @@
+You are implementing one feature in an isolated C#/.NET project workspace.
+
+Hard constraints:
+- Use C# and .NET for the implementation.
+- Work only in the current working directory.
+- Do not read or inspect parent directories, sibling directories, repository root files, or any path outside this workspace.
+- Do not use git. The wrapper script will commit after you finish.
+- Do not implement future specs unless doing so is strictly necessary to keep the current feature coherent.
+- Preserve and build on the existing code in this workspace.
+- Prefer the standard .NET SDK and avoid third-party NuGet packages unless the project already uses them.
+- Add or update focused tests where practical.
+- Run relevant dotnet build/test checks before finishing.
+
+Style/how prompt:
+Implement this with pure unhindered vibe coding. If in doubt? YOLO!
+
+Current feature spec:
+# Feature 9: Output Formats
+
+## Feature
+
+The program can render results in multiple output formats.
+
+## Commands
+
+```sh
+slice data.csv --format csv
+slice data.csv --format json
+slice data.csv --format table
+```
+
+## Behavior
+
+- The `--format` option controls how the final result is displayed.
+- Supported formats are:
+  - `csv`
+  - `json`
+  - `table`
+- If no format is specified, `csv` is used.
+- The selected format does not change which data is computed.
+- `csv` output includes headers when the result is tabular.
+- `json` output represents tabular results as an array of objects.
+- `table` output renders tabular results in a human-readable table.
+- Single-value aggregate results are rendered as a single value in all formats unless the format requires structure.
+
+## Acceptance Criteria
+
+Given the same input and transformation command, changing only `--format` changes the rendering but not the underlying result values.
+
+Implement this feature completely. Leave the workspace containing the finished project files.

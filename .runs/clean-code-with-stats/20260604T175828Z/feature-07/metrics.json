@@ -1,0 +1,45 @@
+{
+  "agent_messages_observed": 12,
+  "apply_patch_calls_observed": 0,
+  "codex_exit_code": 0,
+  "commit_sha": "76a7542bc8ecd248d27eb8a2d5a15ecbc169cade",
+  "duration_seconds": 125,
+  "event_count": 65,
+  "event_types": {
+    "item.completed": 37,
+    "item.started": 25,
+    "thread.started": 1,
+    "turn.completed": 1,
+    "turn.started": 1
+  },
+  "failed_shell_command_calls_observed": 2,
+  "feature": "07",
+  "file_change_calls_observed": 4,
+  "finished_at_utc": "2026-06-04T18:20:00Z",
+  "function_call_names": {
+    "command_execution": 21,
+    "file_change": 4
+  },
+  "function_calls_observed": 25,
+  "git_churn": 203,
+  "git_deletions": 3,
+  "git_files_changed": 3,
+  "git_insertions": 200,
+  "last_message_excerpt": "Implemented `count` and `sum` end-to-end.\n\n- Added command dispatch and argument validation for `count` and `sum` in [`src/Slice/SliceApplication.cs`](/tmp/codex-implement-07.en0T23/project/src/Slice/SliceApplication.cs#L5) and [`src/Slice/SliceApplication.cs`](/tmp/codex-implement-07.en0T23/project/src/Slice/SliceApplication.cs#L17).\n- Added aggregate processors in [`src/Slice/CsvColumnSelector.cs`](/tmp/codex-implement-07.en0T23/project/src/Slice/CsvColumnSelector.cs#L288) and [`src/Slice/CsvColumnSelector.cs`](/tmp/codex-implement-07.en0T23/project/src/Slice/CsvColumnSelector.cs#L317).\n- Added focused tests for row counting, numeric summation, and non-numeric failure handling in [`tests/Slice.Tests/SliceApplicationTests.cs`](/tmp/codex-implement-07.en0T23/project/tests/Slice.Tests/SliceApplicationTests.cs#L163).\n\nValidation:\n- `dotnet build src/Slice/Slice.csproj`\n- `dotnet test Slice.sln`\n\nBoth passed.",
+  "session_id": "019e93db-2fa3-73a2-bd93-f196696b25b0",
+  "shell_command_calls_observed": 21,
+  "spec_path": "specs/FEATURE_07.md",
+  "started_at_utc": "2026-06-04T18:17:55Z",
+  "token_maxima_observed": {
+    "cached_input_tokens": 593792,
+    "input_tokens": 639431,
+    "output_tokens": 7183,
+    "reasoning_output_tokens": 2204
+  },
+  "token_sums_observed": {
+    "cached_input_tokens": 593792,
+    "input_tokens": 639431,
+    "output_tokens": 7183,
+    "reasoning_output_tokens": 2204
+  }
+}

@@ -1,0 +1,16 @@
+Implemented pipeline composition in the CLI parser and executor.
+
+- `Program.cs` now accepts `|` as a pipeline separator, keeps the existing tokenized command style working, and evaluates commands left to right. See [Program.cs](/tmp/codex-implement-10.hEBxIh/project/Program.cs#L38).
+- Execution now tracks result shape explicitly, so row commands operate on tables and aggregates collapse to scalars. Any later row-based command after `count` or `sum` now fails with an error instead of silently misbehaving. See [Program.cs](/tmp/codex-implement-10.hEBxIh/project/Program.cs#L220).
+- `groupby` still produces a table, so it can continue through later row commands where meaningful. See [Program.cs](/tmp/codex-implement-10.hEBxIh/project/Program.cs#L247).
+- Usage text now reflects pipeline syntax. See [Program.cs](/tmp/codex-implement-10.hEBxIh/project/Program.cs#L634).
+
+Tests added:
+- End-to-end pipeline: `where age>30 | sort age | head 3`
+- Aggregate terminal behavior: `where ... | count | head 1` now fails
+
+See [tests/Program.cs](/tmp/codex-implement-10.hEBxIh/project/tests/Program.cs#L20) and [tests/Program.cs](/tmp/codex-implement-10.hEBxIh/project/tests/Program.cs#L489).
+
+Checks run:
+- `dotnet build Slice.csproj`
+- `dotnet run --project tests/Slice.Tests.csproj --no-restore`

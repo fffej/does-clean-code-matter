@@ -1,0 +1,17 @@
+Implemented `where` row filtering for the CSV slicer.
+
+- `SliceApplication` now accepts both `select` and `where` commands and returns a clearer usage message for invalid invocations: [src/Slice/SliceApplication.cs](file:///tmp/codex-implement-03.CREC2J/project/src/Slice/SliceApplication.cs#L15-L54)
+- `CsvTableProcessor` now handles both column selection and comparison filtering, including:
+  - `=`, `!=`, `>`, `<`, `>=`, `<=`
+  - case-insensitive header lookup
+  - numeric comparison when both sides parse as numbers
+  - text comparison otherwise
+  - header preservation and input row order preservation: [src/Slice/CsvColumnSelector.cs](file:///tmp/codex-implement-03.CREC2J/project/src/Slice/CsvColumnSelector.cs#L81-L248)
+- Added focused tests for:
+  - numeric filtering
+  - text filtering
+  - no-match behavior preserving the header
+  - usage handling and existing select behavior: [tests/Slice.Tests/SliceApplicationTests.cs](file:///tmp/codex-implement-03.CREC2J/project/tests/Slice.Tests/SliceApplicationTests.cs#L112-L231)
+
+Validation:
+- `dotnet test Slice.sln` passed, 7/7 tests passed.

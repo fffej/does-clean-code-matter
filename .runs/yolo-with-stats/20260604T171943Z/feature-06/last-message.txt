@@ -1,0 +1,20 @@
+Implemented `distinct` end-to-end.
+
+- Added CLI support in [`Program.cs`](/tmp/codex-implement-06.jus2nX/project/Program.cs#L67) with usage text updated for `distinct` in [`Program.cs`](/tmp/codex-implement-06.jus2nX/project/Program.cs#L93).
+- Added `CsvRoundTripper.WriteDistinctRows` in [`Program.cs`](/tmp/codex-implement-06.jus2nX/project/Program.cs#L289), which:
+  - outputs only the requested columns
+  - removes duplicate rows based on those columns
+  - preserves first-seen order
+  - fails on missing columns
+- Added structural dedupe key comparison to avoid delimiter-collision bugs in [`Program.cs`](/tmp/codex-implement-06.jus2nX/project/Program.cs#L316) and [`Program.cs`](/tmp/codex-implement-06.jus2nX/project/Program.cs#L489).
+- Added focused coverage in [`tests/Program.cs`](/tmp/codex-implement-06.jus2nX/project/tests/Program.cs#L21) and [`tests/Program.cs`](/tmp/codex-implement-06.jus2nX/project/tests/Program.cs#L412) for:
+  - single-column distinct
+  - multi-column distinct
+  - missing-column failure
+
+Verification:
+- `dotnet build Slice.csproj`
+- `dotnet build tests/Slice.Tests.csproj`
+- `dotnet run --project tests/Slice.Tests.csproj`
+
+All passed.

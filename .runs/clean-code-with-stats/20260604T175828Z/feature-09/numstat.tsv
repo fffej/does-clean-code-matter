@@ -1,0 +1,5 @@
+59	136	clean-code-with-stats/src/Slice/CsvColumnSelector.cs
+199	0	clean-code-with-stats/src/Slice/OutputRenderer.cs
+20	0	clean-code-with-stats/src/Slice/QueryResult.cs
+109	29	clean-code-with-stats/src/Slice/SliceApplication.cs
+113	0	clean-code-with-stats/tests/Slice.Tests/SliceApplicationTests.cs

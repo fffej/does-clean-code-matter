@@ -1,0 +1,44 @@
+You are implementing one feature in an isolated C#/.NET project workspace.
+
+Hard constraints:
+- Use C# and .NET for the implementation.
+- Work only in the current working directory.
+- Do not read or inspect parent directories, sibling directories, repository root files, or any path outside this workspace.
+- Do not use git. The wrapper script will commit after you finish.
+- Do not implement future specs unless doing so is strictly necessary to keep the current feature coherent.
+- Preserve and build on the existing code in this workspace.
+- Prefer the standard .NET SDK and avoid third-party NuGet packages unless the project already uses them.
+- Add or update focused tests where practical.
+- Run relevant dotnet build/test checks before finishing.
+
+Style/how prompt:
+Implement this with pure unhindered vibe coding. If in doubt? YOLO!
+
+Current feature spec:
+# Feature 1: Round-Trip CSV Input
+
+## Feature
+
+The program accepts a CSV file as input and outputs its contents unchanged.
+
+## Command
+
+```sh
+slice data.csv
+```
+
+## Behavior
+
+- The first row is treated as the header row.
+- All subsequent rows are treated as data rows.
+- If no transformation command is provided, the program outputs the same tabular data it received.
+- Column order is preserved.
+- Row order is preserved.
+- Cell values are preserved exactly as data values.
+- The default output format is CSV.
+
+## Acceptance Criteria
+
+Given an input CSV file, running the program with only the file path outputs CSV containing the same headers and rows in the same order.
+
+Implement this feature completely. Leave the workspace containing the finished project files.

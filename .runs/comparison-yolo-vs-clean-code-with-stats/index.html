@@ -1,0 +1,35 @@
+<!doctype html><meta charset='utf-8'><title>Codex Style Comparison</title>
+<style>body{font-family:system-ui,sans-serif;max-width:1100px;margin:32px auto;line-height:1.45}table{border-collapse:collapse;width:100%;margin:16px 0}td,th{border:1px solid #ddd;padding:6px 8px;text-align:right}td:first-child,th:first-child{text-align:left}img{max-width:100%;border:1px solid #ddd;margin:12px 0 24px}code{background:#f6f6f6;padding:2px 4px}</style>
+<h1>Codex Style Comparison</h1>
+<p>Runs: <code>yolo-with-stats</code> vs <code>clean-code-with-stats</code>. Data parsed from raw Codex JSONL event logs.</p>
+<h2>Headline Totals</h2><table><tr><th>Metric</th><th>YOLO</th><th>Clean Code</th><th>Clean vs YOLO</th></tr>
+<tr><td>Duration</td><td>1,979 s</td><td>2,204 s</td><td>+11.4%</td></tr>
+<tr><td>Events</td><td>611 </td><td>756 </td><td>+23.7%</td></tr>
+<tr><td>Commands</td><td>191 </td><td>233 </td><td>+22.0%</td></tr>
+<tr><td>Failed commands</td><td>6 </td><td>36 </td><td>+500.0%</td></tr>
+<tr><td>File changes</td><td>46 </td><td>61 </td><td>+32.6%</td></tr>
+<tr><td>Agent messages</td><td>107 </td><td>138 </td><td>+29.0%</td></tr>
+<tr><td>Input tokens</td><td>8,089,505 </td><td>9,938,539 </td><td>+22.9%</td></tr>
+<tr><td>Cached input tokens</td><td>7,592,704 </td><td>9,478,400 </td><td>+24.8%</td></tr>
+<tr><td>Effective input tokens</td><td>496,801 </td><td>460,139 </td><td>-7.4%</td></tr>
+<tr><td>Output tokens</td><td>126,962 </td><td>141,144 </td><td>+11.2%</td></tr>
+<tr><td>Reasoning tokens</td><td>53,771 </td><td>67,479 </td><td>+25.5%</td></tr>
+<tr><td>Git insertions</td><td>2,570 </td><td>2,842 </td><td>+10.6%</td></tr>
+<tr><td>Git deletions</td><td>260 </td><td>453 </td><td>+74.2%</td></tr>
+<tr><td>Git churn</td><td>2,830 </td><td>3,295 </td><td>+16.4%</td></tr>
+<tr><td>Git files changed</td><td>24 </td><td>36 </td><td>+50.0%</td></tr>
+</table>
+<h2>Graphs</h2>
+<h3>Duration By Feature</h3><img src='duration-by-feature.png' alt='duration-by-feature.png'>
+<h3>Input Tokens By Feature</h3><img src='input-tokens-by-feature.png' alt='input-tokens-by-feature.png'>
+<h3>Effective Input Tokens By Feature</h3><img src='effective-input-tokens-by-feature.png' alt='effective-input-tokens-by-feature.png'>
+<h3>Output Tokens By Feature</h3><img src='output-tokens-by-feature.png' alt='output-tokens-by-feature.png'>
+<h3>Reasoning Tokens By Feature</h3><img src='reasoning-tokens-by-feature.png' alt='reasoning-tokens-by-feature.png'>
+<h3>Commands By Feature</h3><img src='commands-by-feature.png' alt='commands-by-feature.png'>
+<h3>Failed Commands By Feature</h3><img src='failed-commands-by-feature.png' alt='failed-commands-by-feature.png'>
+<h3>File Changes By Feature</h3><img src='file-changes-by-feature.png' alt='file-changes-by-feature.png'>
+<h3>Git Churn By Feature</h3><img src='git-churn-by-feature.png' alt='git-churn-by-feature.png'>
+<h3>Token Totals</h3><img src='token-totals.png' alt='token-totals.png'>
+<h3>Tool Totals</h3><img src='tool-totals.png' alt='tool-totals.png'>
+<h3>Git Totals</h3><img src='git-totals.png' alt='git-totals.png'>
+<h2>Files</h2><ul><li><code>comparison-data.json</code></li><li><code>per-feature.csv</code></li></ul>

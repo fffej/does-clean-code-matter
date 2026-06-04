@@ -1,0 +1,16 @@
+Implemented `sort` end-to-end.
+
+What changed:
+- Added `sort <column> [asc|desc]` to the CLI in [`/tmp/codex-implement-04.uNj9Wd/project/Program.cs`](/tmp/codex-implement-04.uNj9Wd/project/Program.cs#L40-L71).
+- Implemented row sorting in `CsvRoundTripper.WriteSortedRows`, with:
+  - header preserved first
+  - default ascending order
+  - descending support
+  - numeric sorting when every value in the sort column parses as a number
+  - text sorting otherwise
+  - missing-column failure
+- Added focused tests for numeric sort, default ascending, text sort, and missing-column failure in [`/tmp/codex-implement-04.uNj9Wd/project/tests/Program.cs`](/tmp/codex-implement-04.uNj9Wd/project/tests/Program.cs#L14-L17) and [`/tmp/codex-implement-04.uNj9Wd/project/tests/Program.cs`](/tmp/codex-implement-04.uNj9Wd/project/tests/Program.cs#L220-L313).
+
+Verification:
+- `dotnet build Slice.csproj` passed.
+- `dotnet run --project tests/Slice.Tests.csproj --no-restore` passed all tests.

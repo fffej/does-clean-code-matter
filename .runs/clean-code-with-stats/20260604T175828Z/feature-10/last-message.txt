@@ -1,0 +1,12 @@
+Implemented the command pipeline feature.
+
+What changed:
+- `SliceApplication` now parses `|`-separated command chains, loads the CSV once, and applies each command left to right. See [src/Slice/SliceApplication.cs](/tmp/codex-implement-10.uW8rLo/project/src/Slice/SliceApplication.cs#L5).
+- `CsvTableProcessor` now has an in-memory execution path so each command consumes the previous `QueryResult` shape instead of rereading the file. See [src/Slice/CsvColumnSelector.cs](/tmp/codex-implement-10.uW8rLo/project/src/Slice/CsvColumnSelector.cs#L9).
+- Added regression tests for:
+  - `where age>30 | sort age | head 3`
+  - rejecting row-based commands after a scalar aggregate
+  See [tests/Slice.Tests/SliceApplicationTests.cs](/tmp/codex-implement-10.uW8rLo/project/tests/Slice.Tests/SliceApplicationTests.cs#L50).
+
+Validation:
+- `dotnet test tests/Slice.Tests/Slice.Tests.csproj` passed.

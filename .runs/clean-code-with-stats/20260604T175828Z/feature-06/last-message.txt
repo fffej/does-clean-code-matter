@@ -1,0 +1,15 @@
+Implemented `distinct` end-to-end.
+
+- Routed the new command, expanded argument parsing to accept one or more columns, and updated usage text in [`src/Slice/SliceApplication.cs`](src/Slice/SliceApplication.cs#L5).
+- Added a streaming distinct implementation that:
+  - outputs only the requested columns,
+  - removes duplicates based on those columns only,
+  - preserves first-seen order,
+  - fails when any requested column is missing in [`src/Slice/CsvColumnSelector.cs`](src/Slice/CsvColumnSelector.cs#L85).
+- Added focused tests for:
+  - unique city output in first-seen order,
+  - missing-column failure,
+  - updated usage text in [`tests/Slice.Tests/SliceApplicationTests.cs`](tests/Slice.Tests/SliceApplicationTests.cs#L84).
+
+Verification:
+- `dotnet test Slice.sln` passed: 16 tests passed.

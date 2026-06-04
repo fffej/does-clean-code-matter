@@ -1,0 +1,51 @@
+You are implementing one feature in an isolated C#/.NET project workspace.
+
+Hard constraints:
+- Use C# and .NET for the implementation.
+- Work only in the current working directory.
+- Do not read or inspect parent directories, sibling directories, repository root files, or any path outside this workspace.
+- Do not use git. The wrapper script will commit after you finish.
+- Do not implement future specs unless doing so is strictly necessary to keep the current feature coherent.
+- Preserve and build on the existing code in this workspace.
+- Prefer the standard .NET SDK and avoid third-party NuGet packages unless the project already uses them.
+- Add or update focused tests where practical.
+- Run relevant dotnet build/test checks before finishing.
+
+Style/how prompt:
+Implement this with pure unhindered vibe coding. If in doubt? YOLO!
+
+Current feature spec:
+# Feature 3: Row Filtering
+
+## Feature
+
+The program can filter rows using a comparison expression.
+
+## Command
+
+```sh
+slice data.csv where age>30
+```
+
+## Behavior
+
+- The `where` command keeps only rows that satisfy the expression.
+- Supported comparison operators are:
+  - `=`
+  - `!=`
+  - `>`
+  - `<`
+  - `>=`
+  - `<=`
+- The left-hand side of the expression is a column name.
+- The right-hand side of the expression is a literal value.
+- Numeric comparisons are used when both compared values are numeric.
+- Otherwise, values are compared as text.
+- The header row is always preserved in CSV output.
+- Row order is preserved among matching rows.
+
+## Acceptance Criteria
+
+Given rows with an `age` column, running `where age>30` outputs only rows where `age` is greater than `30`.
+
+Implement this feature completely. Leave the workspace containing the finished project files.

@@ -1,0 +1,7 @@
+25	0	clean-code-with-stats/Slice.sln
+6	0	clean-code-with-stats/global.json
+10	0	clean-code-with-stats/src/Slice/Program.cs
+10	0	clean-code-with-stats/src/Slice/Slice.csproj
+34	0	clean-code-with-stats/src/Slice/SliceApplication.cs
+18	0	clean-code-with-stats/tests/Slice.Tests/Slice.Tests.csproj
+65	0	clean-code-with-stats/tests/Slice.Tests/SliceApplicationTests.cs

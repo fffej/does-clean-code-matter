@@ -1,0 +1,20 @@
+Implemented `select` column projection for CSV input.
+
+What changed:
+- [Program.cs](/tmp/codex-implement-02.eo56ka/project/Program.cs)
+  - `slice <csv-file> select <column1,column2,...>` is now the supported command form.
+  - The app reads the CSV header, projects only the requested columns, preserves row order, and outputs columns in the requested order.
+  - Missing columns fail with `Column not found: <name>`.
+- [tests/Program.cs](/tmp/codex-implement-02.eo56ka/project/tests/Program.cs)
+  - Added coverage for:
+    - selecting `name,age` from `name,age,city`
+    - missing selected column failure
+    - invalid argument handling
+
+Verification:
+- `dotnet build Slice.csproj`
+- `dotnet run --project tests/Slice.Tests.csproj`
+- Manual CLI check:
+  - `dotnet run --project Slice.csproj -- sample-7Qi2.csv select name,age`
+
+If you want, I can also add support for quoted CSV fields and stricter malformed-row validation, but the requested feature is complete as-is.

@@ -1,0 +1,11 @@
+Implemented `count` and `sum` end-to-end.
+
+- Added command dispatch and argument validation for `count` and `sum` in [`src/Slice/SliceApplication.cs`](/tmp/codex-implement-07.en0T23/project/src/Slice/SliceApplication.cs#L5) and [`src/Slice/SliceApplication.cs`](/tmp/codex-implement-07.en0T23/project/src/Slice/SliceApplication.cs#L17).
+- Added aggregate processors in [`src/Slice/CsvColumnSelector.cs`](/tmp/codex-implement-07.en0T23/project/src/Slice/CsvColumnSelector.cs#L288) and [`src/Slice/CsvColumnSelector.cs`](/tmp/codex-implement-07.en0T23/project/src/Slice/CsvColumnSelector.cs#L317).
+- Added focused tests for row counting, numeric summation, and non-numeric failure handling in [`tests/Slice.Tests/SliceApplicationTests.cs`](/tmp/codex-implement-07.en0T23/project/tests/Slice.Tests/SliceApplicationTests.cs#L163).
+
+Validation:
+- `dotnet build src/Slice/Slice.csproj`
+- `dotnet test Slice.sln`
+
+Both passed.

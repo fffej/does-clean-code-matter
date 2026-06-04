@@ -1,0 +1,45 @@
+{
+  "agent_messages_observed": 14,
+  "apply_patch_calls_observed": 0,
+  "codex_exit_code": 0,
+  "commit_sha": "4e533f51ff815f4e51724b8bf0a7781e41a10ddd",
+  "duration_seconds": 271,
+  "event_count": 85,
+  "event_types": {
+    "item.completed": 48,
+    "item.started": 34,
+    "thread.started": 1,
+    "turn.completed": 1,
+    "turn.started": 1
+  },
+  "failed_shell_command_calls_observed": 3,
+  "feature": "10",
+  "file_change_calls_observed": 5,
+  "finished_at_utc": "2026-06-04T18:35:13Z",
+  "function_call_names": {
+    "command_execution": 29,
+    "file_change": 5
+  },
+  "function_calls_observed": 34,
+  "git_churn": 555,
+  "git_deletions": 209,
+  "git_files_changed": 3,
+  "git_insertions": 346,
+  "last_message_excerpt": "Implemented the command pipeline feature.\n\nWhat changed:\n- `SliceApplication` now parses `|`-separated command chains, loads the CSV once, and applies each command left to right. See [src/Slice/SliceApplication.cs](/tmp/codex-implement-10.uW8rLo/project/src/Slice/SliceApplication.cs#L5).\n- `CsvTableProcessor` now has an in-memory execution path so each command consumes the previous `QueryResult` shape instead of rereading the file. See [src/Slice/CsvColumnSelector.cs](/tmp/codex-implement-10.uW8rLo/project/src/Slice/CsvColumnSelector.cs#L9).\n- Added regression tests for:\n  - `where age>30 | sort age | head 3`\n  - rejecting row-based commands after a scalar aggregate\n  See [tests/Slice.Tests/SliceApplicationTests.cs](/tmp/codex-implement-10.uW8rLo/project/tests/Slice.Tests/SliceApplicationTests.cs#L50).\n\nValidation:\n- `dotnet test tests/Slice.Tests/Slice.Tests.csproj` passed.",
+  "session_id": "019e93e6-e381-75e2-8296-2595aed3dc3e",
+  "shell_command_calls_observed": 29,
+  "spec_path": "specs/FEATURE_10.md",
+  "started_at_utc": "2026-06-04T18:30:42Z",
+  "token_maxima_observed": {
+    "cached_input_tokens": 1187072,
+    "input_tokens": 1232232,
+    "output_tokens": 21824,
+    "reasoning_output_tokens": 11835
+  },
+  "token_sums_observed": {
+    "cached_input_tokens": 1187072,
+    "input_tokens": 1232232,
+    "output_tokens": 21824,
+    "reasoning_output_tokens": 11835
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "agent_messages_observed": 9,
+  "apply_patch_calls_observed": 0,
+  "codex_exit_code": 0,
+  "commit_sha": "fec87e9862ef3818c6f3b2a75b66aead6f848675",
+  "duration_seconds": 116,
+  "event_count": 42,
+  "event_types": {
+    "item.completed": 24,
+    "item.started": 15,
+    "thread.started": 1,
+    "turn.completed": 1,
+    "turn.started": 1
+  },
+  "failed_shell_command_calls_observed": 0,
+  "feature": "03",
+  "file_change_calls_observed": 3,
+  "finished_at_utc": "2026-06-04T17:26:27Z",
+  "function_call_names": {
+    "command_execution": 12,
+    "file_change": 3
+  },
+  "function_calls_observed": 15,
+  "git_churn": 299,
+  "git_deletions": 5,
+  "git_files_changed": 2,
+  "git_insertions": 294,
+  "last_message_excerpt": "Implemented `where` row filtering with support for `=`, `!=`, `>`, `<`, `>=`, and `<=`.\n\nWhat changed:\n- Added `where` handling in [Program.cs](/tmp/codex-implement-03.tStf0F/project/Program.cs)\n- Kept the header row intact and preserved matching row order\n- Used numeric comparison when both sides parse as numbers; otherwise compared as text\n- Added focused coverage in [tests/Program.cs](/tmp/codex-implement-03.tStf0F/project/tests/Program.cs)\n\nChecks run:\n- `dotnet build`\n- `dotnet build tests/Slice.Tests.csproj`\n- `dotnet run --project tests/Slice.Tests.csproj`\n\nAll passed.",
+  "session_id": "019e93aa-4d56-7700-9c97-6d3eabc003db",
+  "shell_command_calls_observed": 12,
+  "spec_path": "specs/FEATURE_03.md",
+  "started_at_utc": "2026-06-04T17:24:31Z",
+  "token_maxima_observed": {
+    "cached_input_tokens": 283264,
+    "input_tokens": 339056,
+    "output_tokens": 7937,
+    "reasoning_output_tokens": 3536
+  },
+  "token_sums_observed": {
+    "cached_input_tokens": 283264,
+    "input_tokens": 339056,
+    "output_tokens": 7937,
+    "reasoning_output_tokens": 3536
+  }
+}

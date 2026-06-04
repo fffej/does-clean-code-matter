@@ -1,0 +1,15 @@
+Implemented `count` and `sum` with command chaining support for aggregates after `where`, `head`, `sort`, `select`, and `distinct`.
+
+- Core changes are in [Program.cs](/tmp/codex-implement-07.twk5bW/project/Program.cs#L11), where `SliceApp` now parses command sequences, keeps the existing single-command paths, and switches to an in-memory table pipeline for aggregate/chained cases.
+- Added focused coverage in [tests/Program.cs](/tmp/codex-implement-07.twk5bW/project/tests/Program.cs#L4) for:
+  - `count` over all rows
+  - `count` after filtering
+  - `sum` over a numeric column
+  - failure on missing `sum` column
+  - failure on nonnumeric `sum` values
+
+Verified with:
+- `dotnet build tests/Slice.Tests.csproj --no-restore -v minimal`
+- `dotnet run --project tests/Slice.Tests.csproj --no-build`
+- `dotnet run --project Slice.csproj -- sample-7Qi2.csv count`
+

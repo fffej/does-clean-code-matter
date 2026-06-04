@@ -1,0 +1,14 @@
+Implemented `where` row filtering with support for `=`, `!=`, `>`, `<`, `>=`, and `<=`.
+
+What changed:
+- Added `where` handling in [Program.cs](/tmp/codex-implement-03.tStf0F/project/Program.cs)
+- Kept the header row intact and preserved matching row order
+- Used numeric comparison when both sides parse as numbers; otherwise compared as text
+- Added focused coverage in [tests/Program.cs](/tmp/codex-implement-03.tStf0F/project/tests/Program.cs)
+
+Checks run:
+- `dotnet build`
+- `dotnet build tests/Slice.Tests.csproj`
+- `dotnet run --project tests/Slice.Tests.csproj`
+
+All passed.
