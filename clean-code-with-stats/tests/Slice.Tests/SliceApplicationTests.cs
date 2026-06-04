@@ -229,4 +229,167 @@ public sealed class SliceApplicationTests
             }
         }
     }
+
+    [TestMethod]
+    public async Task RunAsync_WithSortCommandAndExplicitDescendingDirection_SortsNumericValuesFromHighestToLowest()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.csv");
+        var input = string.Join("\r\n", [
+            "name,age,city",
+            "Ada,36,London",
+            "Bob,29,Paris",
+            "Carol,31,Berlin",
+            "Dave,40,Rome",
+            string.Empty
+        ]);
+        var expected = string.Join("\r\n", [
+            "name,age,city",
+            "Dave,40,Rome",
+            "Ada,36,London",
+            "Carol,31,Berlin",
+            "Bob,29,Paris",
+            string.Empty
+        ]);
+        var inputBytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(input);
+        var expectedBytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(expected);
+
+        try
+        {
+            await File.WriteAllBytesAsync(tempFile, inputBytes);
+
+            await using var output = new MemoryStream();
+            var app = new SliceApplication(output, TextWriter.Null);
+
+            var exitCode = await app.RunAsync([tempFile, "sort", "age", "desc"]);
+
+            Assert.AreEqual(0, exitCode);
+            CollectionAssert.AreEqual(expectedBytes, output.ToArray());
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    [TestMethod]
+    public async Task RunAsync_WithSortCommandAndNoDirection_UsesAscendingOrder()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.csv");
+        var input = string.Join("\r\n", [
+            "name,age",
+            "Ada,36",
+            "Bob,29",
+            "Carol,31",
+            string.Empty
+        ]);
+        var expected = string.Join("\r\n", [
+            "name,age",
+            "Bob,29",
+            "Carol,31",
+            "Ada,36",
+            string.Empty
+        ]);
+        var inputBytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(input);
+        var expectedBytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(expected);
+
+        try
+        {
+            await File.WriteAllBytesAsync(tempFile, inputBytes);
+
+            await using var output = new MemoryStream();
+            var app = new SliceApplication(output, TextWriter.Null);
+
+            var exitCode = await app.RunAsync([tempFile, "sort", "age"]);
+
+            Assert.AreEqual(0, exitCode);
+            CollectionAssert.AreEqual(expectedBytes, output.ToArray());
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    [TestMethod]
+    public async Task RunAsync_WithSortCommandAndTextValues_SortsLexicographically()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.csv");
+        var input = string.Join("\r\n", [
+            "name,age",
+            "Zoe,36",
+            "Ada,29",
+            "Bob,31",
+            string.Empty
+        ]);
+        var expected = string.Join("\r\n", [
+            "name,age",
+            "Ada,29",
+            "Bob,31",
+            "Zoe,36",
+            string.Empty
+        ]);
+        var inputBytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(input);
+        var expectedBytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(expected);
+
+        try
+        {
+            await File.WriteAllBytesAsync(tempFile, inputBytes);
+
+            await using var output = new MemoryStream();
+            var app = new SliceApplication(output, TextWriter.Null);
+
+            var exitCode = await app.RunAsync([tempFile, "sort", "name"]);
+
+            Assert.AreEqual(0, exitCode);
+            CollectionAssert.AreEqual(expectedBytes, output.ToArray());
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    [TestMethod]
+    public async Task RunAsync_WithSortCommandAndMissingColumn_ReturnsAnError()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.csv");
+        var input = string.Join("\r\n", [
+            "name,age",
+            "Ada,36",
+            "Bob,29",
+            string.Empty
+        ]);
+        var inputBytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(input);
+
+        try
+        {
+            await File.WriteAllBytesAsync(tempFile, inputBytes);
+
+            await using var output = new MemoryStream();
+            var error = new StringWriter();
+            var app = new SliceApplication(output, error);
+
+            var exitCode = await app.RunAsync([tempFile, "sort", "height"]);
+
+            Assert.AreEqual(1, exitCode);
+            StringAssert.Contains(error.ToString(), "Column not found: height");
+            Assert.AreEqual(0, output.Length);
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
 }

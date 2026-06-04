@@ -131,6 +131,68 @@ internal sealed class CsvTableProcessor
         return null;
     }
 
+    public async Task<string?> WriteSortedRowsAsync(
+        Stream input,
+        Stream output,
+        string columnName,
+        string? directionArgument)
+    {
+        if (!TryParseSortDirection(directionArgument, out var sortDirection, out var errorMessage))
+        {
+            return errorMessage;
+        }
+
+        using var parser = CreateParser(input);
+
+        var headers = parser.ReadFields();
+        if (headers is null)
+        {
+            return "CSV file is empty.";
+        }
+
+        var sortColumnIndex = Array.FindIndex(
+            headers,
+            header => string.Equals(header, columnName, StringComparison.OrdinalIgnoreCase));
+
+        if (sortColumnIndex < 0)
+        {
+            return $"Column not found: {columnName}";
+        }
+
+        var rows = new List<CsvRow>();
+        while (!parser.EndOfData)
+        {
+            var fields = parser.ReadFields();
+            if (fields is null)
+            {
+                continue;
+            }
+
+            rows.Add(new CsvRow(fields, GetSortValue(fields, sortColumnIndex)));
+        }
+
+        var allRowsAreNumeric = rows.All(row => row.SortValue.IsNumeric);
+        var orderedRows = allRowsAreNumeric
+            ? sortDirection == SortDirection.Ascending
+                ? rows.OrderBy(row => row.SortValue.NumericValue)
+                : rows.OrderByDescending(row => row.SortValue.NumericValue)
+            : sortDirection == SortDirection.Ascending
+                ? rows.OrderBy(row => row.SortValue.TextValue, StringComparer.Ordinal)
+                : rows.OrderByDescending(row => row.SortValue.TextValue, StringComparer.Ordinal);
+
+        await using var writer = CreateWriter(output);
+        await writer.WriteLineAsync(BuildCsvRow(headers)).ConfigureAwait(false);
+
+        foreach (var row in orderedRows)
+        {
+            await writer.WriteLineAsync(BuildCsvRow(row.Fields)).ConfigureAwait(false);
+        }
+
+        await writer.FlushAsync().ConfigureAwait(false);
+        await output.FlushAsync().ConfigureAwait(false);
+        return null;
+    }
+
     private static string BuildCsvRow(IReadOnlyList<string> fields, IReadOnlyList<int> selectedIndexes)
     {
         var selectedFields = new string[selectedIndexes.Count];
@@ -141,6 +203,59 @@ internal sealed class CsvTableProcessor
         }
 
         return string.Join(",", selectedFields);
+    }
+
+    private static string BuildCsvRow(IReadOnlyList<string> fields)
+    {
+        var outputFields = new string[fields.Count];
+        for (var i = 0; i < fields.Count; i++)
+        {
+            outputFields[i] = EscapeCsvField(fields[i]);
+        }
+
+        return string.Join(",", outputFields);
+    }
+
+    private static SortValue GetSortValue(IReadOnlyList<string> fields, int sortColumnIndex)
+    {
+        var value = sortColumnIndex < fields.Count ? fields[sortColumnIndex] : string.Empty;
+        if (decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var numericValue))
+        {
+            return new SortValue(true, numericValue, value);
+        }
+
+        return new SortValue(false, default, value);
+    }
+
+    private static bool TryParseSortDirection(
+        string? directionArgument,
+        out SortDirection sortDirection,
+        out string? errorMessage)
+    {
+        if (directionArgument is null)
+        {
+            sortDirection = SortDirection.Ascending;
+            errorMessage = null;
+            return true;
+        }
+
+        if (string.Equals(directionArgument, "asc", StringComparison.OrdinalIgnoreCase))
+        {
+            sortDirection = SortDirection.Ascending;
+            errorMessage = null;
+            return true;
+        }
+
+        if (string.Equals(directionArgument, "desc", StringComparison.OrdinalIgnoreCase))
+        {
+            sortDirection = SortDirection.Descending;
+            errorMessage = null;
+            return true;
+        }
+
+        sortDirection = SortDirection.Ascending;
+        errorMessage = $"Invalid sort direction: {directionArgument}";
+        return false;
     }
 
     private static TextFieldParser CreateParser(Stream input)
@@ -183,6 +298,16 @@ internal sealed class CsvTableProcessor
 
         var escaped = value.Replace("\"", "\"\"");
         return $"\"{escaped}\"";
+    }
+
+    private sealed record CsvRow(IReadOnlyList<string> Fields, SortValue SortValue);
+
+    private sealed record SortValue(bool IsNumeric, decimal NumericValue, string TextValue);
+
+    private enum SortDirection
+    {
+        Ascending,
+        Descending
     }
 
     private sealed record CsvWhereClause(string ColumnName, ComparisonOperator Operator, string LiteralValue)
