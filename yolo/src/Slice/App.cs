@@ -2,20 +2,21 @@ namespace Slice;
 
 public static class App
 {
+    private const string Usage =
+        "Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc] | head <rows> | distinct <columns...>";
+
     public static int Run(string[] args, TextReader input, TextWriter output, TextWriter error)
     {
         _ = input;
 
-        if (args.Length < 3 || args.Length > 4)
+        if (args.Length < 3)
         {
-            error.WriteLine("Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc] | head <rows>");
+            error.WriteLine(Usage);
             return 1;
         }
 
         string path = args[0];
         string command = args[1];
-        string argument = args[2];
-        string? optionalArgument = args.Length == 4 ? args[3] : null;
 
         if (!File.Exists(path))
         {
@@ -41,6 +42,13 @@ public static class App
 
         if (string.Equals(command, "select", StringComparison.Ordinal))
         {
+            if (args.Length != 3)
+            {
+                error.WriteLine(Usage);
+                return 1;
+            }
+
+            string argument = args[2];
             string[] requestedColumns = argument
                 .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
@@ -56,12 +64,19 @@ public static class App
                 return 1;
             }
 
-            CsvDocument.WriteSelection(document, selectedIndexes, output);
+            CsvDocument.WriteSelection(document, selectedIndexes, document.Rows, output);
             return 0;
         }
 
         if (string.Equals(command, "where", StringComparison.Ordinal))
         {
+            if (args.Length != 3)
+            {
+                error.WriteLine(Usage);
+                return 1;
+            }
+
+            string argument = args[2];
             if (!TryParseWhereExpression(argument, out string columnName, out ComparisonOperator comparisonOperator, out string literalValue, out string whereError))
             {
                 error.WriteLine(whereError);
@@ -91,6 +106,14 @@ public static class App
 
         if (string.Equals(command, "sort", StringComparison.Ordinal))
         {
+            if (args.Length < 3 || args.Length > 4)
+            {
+                error.WriteLine(Usage);
+                return 1;
+            }
+
+            string argument = args[2];
+            string? optionalArgument = args.Length == 4 ? args[3] : null;
             if (!TryParseSortDirection(optionalArgument, out bool descending, out string sortError))
             {
                 error.WriteLine(sortError);
@@ -109,12 +132,13 @@ public static class App
 
         if (string.Equals(command, "head", StringComparison.Ordinal))
         {
-            if (optionalArgument is not null)
+            if (args.Length != 3)
             {
-                error.WriteLine("Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc] | head <rows>");
+                error.WriteLine(Usage);
                 return 1;
             }
 
+            string argument = args[2];
             if (!int.TryParse(argument, out int rowCount) || rowCount <= 0)
             {
                 error.WriteLine("Invalid row count.");
@@ -127,7 +151,38 @@ public static class App
             return 0;
         }
 
-        error.WriteLine("Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc] | head <rows>");
+        if (string.Equals(command, "distinct", StringComparison.Ordinal))
+        {
+            if (args.Length < 3)
+            {
+                error.WriteLine(Usage);
+                return 1;
+            }
+
+            string[] requestedColumns = args[2..];
+            if (!TryBuildSelection(document.Header, requestedColumns, out int[] selectedIndexes, out string missingColumn))
+            {
+                error.WriteLine($"Column not found: {missingColumn}");
+                return 1;
+            }
+
+            var distinctRows = new List<IReadOnlyList<string>>();
+            var seenKeys = new HashSet<string[]>(new StringArrayComparer());
+
+            foreach (IReadOnlyList<string> row in document.Rows)
+            {
+                string[] key = BuildDistinctKey(row, selectedIndexes);
+                if (seenKeys.Add(key))
+                {
+                    distinctRows.Add(row);
+                }
+            }
+
+            CsvDocument.WriteSelection(document, selectedIndexes, distinctRows, output);
+            return 0;
+        }
+
+        error.WriteLine(Usage);
         return 1;
     }
 
@@ -225,6 +280,18 @@ public static class App
         sortedRows = orderedRows.ToArray();
         error = string.Empty;
         return true;
+    }
+
+    private static string[] BuildDistinctKey(IReadOnlyList<string> row, IReadOnlyList<int> selectedIndexes)
+    {
+        var key = new string[selectedIndexes.Count];
+        for (int i = 0; i < selectedIndexes.Count; i++)
+        {
+            int index = selectedIndexes[i];
+            key[i] = index < row.Count ? row[index] : string.Empty;
+        }
+
+        return key;
     }
 
     private static bool TryParseSortDirection(string? directionArgument, out bool descending, out string error)
@@ -360,5 +427,42 @@ public static class App
         LessThan,
         GreaterThanOrEqual,
         LessThanOrEqual,
+    }
+
+    private sealed class StringArrayComparer : IEqualityComparer<string[]>
+    {
+        public bool Equals(string[]? x, string[]? y)
+        {
+            if (ReferenceEquals(x, y))
+            {
+                return true;
+            }
+
+            if (x is null || y is null || x.Length != y.Length)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < x.Length; i++)
+            {
+                if (!string.Equals(x[i], y[i], StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        public int GetHashCode(string[] obj)
+        {
+            var hashCode = new HashCode();
+            for (int i = 0; i < obj.Length; i++)
+            {
+                hashCode.Add(obj[i], StringComparer.Ordinal);
+            }
+
+            return hashCode.ToHashCode();
+        }
     }
 }

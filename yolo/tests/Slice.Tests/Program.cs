@@ -17,6 +17,9 @@ static class Program
             RunHeadFirstNRowsTest();
             RunHeadFewerThanRequestedRowsTest();
             RunHeadInvalidRowCountTest();
+            RunDistinctSingleColumnFirstSeenOrderTest();
+            RunDistinctMultipleColumnsCompositeKeyTest();
+            RunDistinctMissingColumnTest();
 
             return 0;
         }
@@ -352,6 +355,108 @@ static class Program
             AssertEqual(1, negativeExitCode, "head negative exit code");
             AssertEqual(string.Empty, output.ToString(), "head negative stdout");
             AssertEqual("Invalid row count." + Environment.NewLine, error.ToString(), "head negative stderr");
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    private static void RunDistinctSingleColumnFirstSeenOrderTest()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"slice-distinct-single-{Guid.NewGuid():N}.csv");
+        var inputCsv = "name,city\r\n" +
+                       "\"Ada\",\"London\"\r\n" +
+                       "\"Grace\",\"New York\"\r\n" +
+                       "\"Linus\",\"London\"\r\n" +
+                       "\"Barbara\",\"Paris\"\r\n" +
+                       "\"Edsger\",\"New York\"\r\n";
+        var expected = "city\r\n" +
+                       "London\r\n" +
+                       "New York\r\n" +
+                       "Paris\r\n";
+
+        try
+        {
+            File.WriteAllText(tempFile, inputCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            using var input = new StringReader(string.Empty);
+            using var output = new StringWriter();
+            using var error = new StringWriter();
+
+            var exitCode = App.Run([tempFile, "distinct", "city"], input, output, error);
+
+            AssertEqual(0, exitCode, "distinct single exit code");
+            AssertEqual(expected, output.ToString(), "distinct single stdout");
+            AssertEqual(string.Empty, error.ToString(), "distinct single stderr");
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    private static void RunDistinctMultipleColumnsCompositeKeyTest()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"slice-distinct-composite-{Guid.NewGuid():N}.csv");
+        var inputCsv = "name,city,team\r\n" +
+                       "\"Ada\",\"London\",\"A\"\r\n" +
+                       "\"Grace\",\"London\",\"A\"\r\n" +
+                       "\"Linus\",\"London\",\"B\"\r\n" +
+                       "\"Barbara\",\"Paris\",\"A\"\r\n" +
+                       "\"Edsger\",\"Paris\",\"A\"\r\n";
+        var expected = "city,team\r\n" +
+                       "London,A\r\n" +
+                       "London,B\r\n" +
+                       "Paris,A\r\n";
+
+        try
+        {
+            File.WriteAllText(tempFile, inputCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            using var input = new StringReader(string.Empty);
+            using var output = new StringWriter();
+            using var error = new StringWriter();
+
+            var exitCode = App.Run([tempFile, "distinct", "city", "team"], input, output, error);
+
+            AssertEqual(0, exitCode, "distinct composite exit code");
+            AssertEqual(expected, output.ToString(), "distinct composite stdout");
+            AssertEqual(string.Empty, error.ToString(), "distinct composite stderr");
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    private static void RunDistinctMissingColumnTest()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"slice-distinct-missing-{Guid.NewGuid():N}.csv");
+        var inputCsv = "name,city\r\nAda,London\r\n";
+
+        try
+        {
+            File.WriteAllText(tempFile, inputCsv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+            using var input = new StringReader(string.Empty);
+            using var output = new StringWriter();
+            using var error = new StringWriter();
+
+            var exitCode = App.Run([tempFile, "distinct", "country"], input, output, error);
+
+            AssertEqual(1, exitCode, "distinct missing exit code");
+            AssertEqual(string.Empty, output.ToString(), "distinct missing stdout");
+            AssertEqual("Column not found: country" + Environment.NewLine, error.ToString(), "distinct missing stderr");
         }
         finally
         {

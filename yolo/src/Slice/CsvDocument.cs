@@ -184,16 +184,20 @@ internal sealed class CsvDocument
         }
     }
 
-    public static void WriteSelection(CsvDocument document, IReadOnlyList<int> selectedIndexes, TextWriter output)
+    public static void WriteSelection(
+        CsvDocument document,
+        IReadOnlyList<int> selectedIndexes,
+        IReadOnlyList<IReadOnlyList<string>> rows,
+        TextWriter output)
     {
         string separator = document.LineEnding;
 
         WriteRow(output, document.Header, selectedIndexes);
 
-        for (int i = 0; i < document.Rows.Count; i++)
+        for (int i = 0; i < rows.Count; i++)
         {
             output.Write(separator);
-            WriteRow(output, document.Rows[i], selectedIndexes);
+            WriteRow(output, rows[i], selectedIndexes);
         }
 
         if (document.EndsWithLineEnding)
