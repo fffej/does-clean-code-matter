@@ -75,6 +75,12 @@ public static class SliceApp
         {
             var token = filteredArgs[index];
 
+            if (IsPipelineSeparator(token))
+            {
+                index++;
+                continue;
+            }
+
             if (IsCommand(token, "select"))
             {
                 if (index + 1 >= filteredArgs.Count)
@@ -94,7 +100,7 @@ public static class SliceApp
 
                 var expressionStart = index + 1;
                 index = expressionStart;
-                while (index < filteredArgs.Count && !IsCommandKeyword(filteredArgs[index]))
+                while (index < filteredArgs.Count && !IsCommandKeyword(filteredArgs[index]) && !IsPipelineSeparator(filteredArgs[index]))
                 {
                     index++;
                 }
@@ -117,7 +123,7 @@ public static class SliceApp
                 var direction = "asc";
                 index += 2;
 
-                if (index < filteredArgs.Count && !IsCommandKeyword(filteredArgs[index]))
+                if (index < filteredArgs.Count && !IsCommandKeyword(filteredArgs[index]) && !IsPipelineSeparator(filteredArgs[index]))
                 {
                     direction = filteredArgs[index];
                     index++;
@@ -144,7 +150,7 @@ public static class SliceApp
 
                 var columnsStart = index + 1;
                 index = columnsStart;
-                while (index < filteredArgs.Count && !IsCommandKeyword(filteredArgs[index]))
+                while (index < filteredArgs.Count && !IsCommandKeyword(filteredArgs[index]) && !IsPipelineSeparator(filteredArgs[index]))
                 {
                     index++;
                 }
@@ -160,7 +166,6 @@ public static class SliceApp
             {
                 commands.Add(new PipelineCommand(PipelineCommandKind.Count));
                 index++;
-                return index == filteredArgs.Count;
             }
             else if (IsCommand(token, "sum"))
             {
@@ -171,7 +176,6 @@ public static class SliceApp
 
                 commands.Add(new PipelineCommand(PipelineCommandKind.Sum, filteredArgs[index + 1]));
                 index += 2;
-                return index == filteredArgs.Count;
             }
             else if (IsCommand(token, "groupby"))
             {
@@ -187,7 +191,7 @@ public static class SliceApp
                 {
                     commands.Add(new PipelineCommand(PipelineCommandKind.GroupByCount, groupColumnName));
                     index += 3;
-                    return index == filteredArgs.Count;
+                    continue;
                 }
 
                 if (IsCommand(aggregateName, "sum"))
@@ -199,7 +203,7 @@ public static class SliceApp
 
                     commands.Add(new PipelineCommand(PipelineCommandKind.GroupBySum, groupColumnName, filteredArgs[index + 3]));
                     index += 4;
-                    return index == filteredArgs.Count;
+                    continue;
                 }
 
                 return false;
@@ -215,50 +219,56 @@ public static class SliceApp
 
     private static void ExecuteCommandSequence(string path, IReadOnlyList<PipelineCommand> commands, OutputFormat format, Stream outputStream)
     {
-        var table = ReadTable(path);
+        PipelineResult current = new TableResult(ReadTable(path));
 
         foreach (var command in commands)
         {
-            switch (command.Kind)
+            current = current switch
             {
-                case PipelineCommandKind.Select:
-                    table = SelectColumns(table, command.FirstArgument);
-                    break;
-                case PipelineCommandKind.Where:
-                    table = FilterRows(table, command.FirstArgument);
-                    break;
-                case PipelineCommandKind.Sort:
-                    table = SortRows(table, command.FirstArgument, command.SecondArgument ?? "asc");
-                    break;
-                case PipelineCommandKind.Head:
-                    if (!int.TryParse(command.FirstArgument, out var rowCount))
-                    {
-                        throw new InvalidOperationException("Row count must be a positive integer");
-                    }
-
-                    table = HeadRows(table, rowCount);
-                    break;
-                case PipelineCommandKind.Distinct:
-                    table = DistinctRows(table, command.FirstArgument);
-                    break;
-                case PipelineCommandKind.Count:
-                    WriteScalar(table.Rows.Count, format, outputStream);
-                    return;
-                case PipelineCommandKind.Sum:
-                    WriteScalar(CalculateSum(table, command.FirstArgument), format, outputStream);
-                    return;
-                case PipelineCommandKind.GroupByCount:
-                    table = BuildGroupedCountTable(table, command.FirstArgument);
-                    break;
-                case PipelineCommandKind.GroupBySum:
-                    table = BuildGroupedSumTable(table, command.FirstArgument, command.SecondArgument ?? string.Empty);
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException();
-            }
+                TableResult tableResult => ExecuteTableCommand(tableResult.Table, command),
+                ScalarResult => throw new InvalidOperationException("Cannot apply a row-based command after an aggregate result"),
+                _ => throw new ArgumentOutOfRangeException()
+            };
         }
 
-        WriteTable(table, format, outputStream);
+        switch (current)
+        {
+            case TableResult tableResult:
+                WriteTable(tableResult.Table, format, outputStream);
+                break;
+            case ScalarResult scalarResult:
+                WriteScalar(scalarResult.Value, format, outputStream);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(current));
+        }
+    }
+
+    private static PipelineResult ExecuteTableCommand(CsvTable table, PipelineCommand command)
+    {
+        return command.Kind switch
+        {
+            PipelineCommandKind.Select => new TableResult(SelectColumns(table, command.FirstArgument)),
+            PipelineCommandKind.Where => new TableResult(FilterRows(table, command.FirstArgument)),
+            PipelineCommandKind.Sort => new TableResult(SortRows(table, command.FirstArgument, command.SecondArgument ?? "asc")),
+            PipelineCommandKind.Head => new TableResult(HeadRows(table, ParseRowCount(command.FirstArgument))),
+            PipelineCommandKind.Distinct => new TableResult(DistinctRows(table, command.FirstArgument)),
+            PipelineCommandKind.Count => new ScalarResult(table.Rows.Count),
+            PipelineCommandKind.Sum => new ScalarResult(CalculateSum(table, command.FirstArgument)),
+            PipelineCommandKind.GroupByCount => new TableResult(BuildGroupedCountTable(table, command.FirstArgument)),
+            PipelineCommandKind.GroupBySum => new TableResult(BuildGroupedSumTable(table, command.FirstArgument, command.SecondArgument ?? string.Empty)),
+            _ => throw new ArgumentOutOfRangeException(nameof(command))
+        };
+    }
+
+    private static int ParseRowCount(string value)
+    {
+        if (!int.TryParse(value, out var rowCount))
+        {
+            throw new InvalidOperationException("Row count must be a positive integer");
+        }
+
+        return rowCount;
     }
 
     private static decimal CalculateSum(CsvTable table, string columnName)
@@ -632,6 +642,11 @@ public static class SliceApp
         return string.Equals(value, command, StringComparison.Ordinal);
     }
 
+    private static bool IsPipelineSeparator(string value)
+    {
+        return string.Equals(value, "|", StringComparison.Ordinal);
+    }
+
     private static bool IsOption(string value, string option)
     {
         return string.Equals(value, option, StringComparison.Ordinal);
@@ -794,15 +809,16 @@ public static class SliceApp
 
     private static void WriteUsage(TextWriter stderr)
     {
-        stderr.WriteLine("Usage: slice <csv-file> [--format csv|json|table] select <column1,column2,...>");
-        stderr.WriteLine("   or: slice <csv-file> [--format csv|json|table] where <column><operator><value>");
-        stderr.WriteLine("   or: slice <csv-file> [--format csv|json|table] sort <column> [asc|desc]");
-        stderr.WriteLine("   or: slice <csv-file> [--format csv|json|table] head <positive-integer>");
-        stderr.WriteLine("   or: slice <csv-file> [--format csv|json|table] distinct <column1> [column2 ...]");
-        stderr.WriteLine("   or: slice <csv-file> [--format csv|json|table] count");
-        stderr.WriteLine("   or: slice <csv-file> [--format csv|json|table] sum <column>");
-        stderr.WriteLine("   or: slice <csv-file> [--format csv|json|table] groupby <column> count");
-        stderr.WriteLine("   or: slice <csv-file> [--format csv|json|table] groupby <column> sum <column>");
+        stderr.WriteLine("Usage: slice <csv-file> [--format csv|json|table] <command> [| <command> ...]");
+        stderr.WriteLine("Commands: select <column1,column2,...>");
+        stderr.WriteLine("          where <column><operator><value>");
+        stderr.WriteLine("          sort <column> [asc|desc]");
+        stderr.WriteLine("          head <positive-integer>");
+        stderr.WriteLine("          distinct <column1> [column2 ...]");
+        stderr.WriteLine("          count");
+        stderr.WriteLine("          sum <column>");
+        stderr.WriteLine("          groupby <column> count");
+        stderr.WriteLine("          groupby <column> sum <column>");
     }
 
     private sealed class CsvTable
@@ -893,6 +909,12 @@ public static class SliceApp
         Json,
         Table
     }
+
+    private abstract record PipelineResult;
+
+    private sealed record TableResult(CsvTable Table) : PipelineResult;
+
+    private sealed record ScalarResult(object Value) : PipelineResult;
 
 }
 

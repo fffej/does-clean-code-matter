@@ -19,6 +19,8 @@ var tests = new List<(string Name, Action Test)>
     ("returns failure when head row count is not positive", ReturnsFailureWhenHeadRowCountIsNotPositive),
     ("counts all data rows", CountsAllDataRows),
     ("counts remaining rows after filtering", CountsRemainingRowsAfterFiltering),
+    ("pipes row commands from left to right", PipesRowCommandsFromLeftToRight),
+    ("rejects row commands after an aggregate result", RejectsRowCommandsAfterAnAggregateResult),
     ("sums a numeric column", SumsANumericColumn),
     ("returns failure when sum column values are nonnumeric", ReturnsFailureWhenSumColumnValuesAreNonnumeric),
     ("returns failure when sum column is missing", ReturnsFailureWhenSumColumnIsMissing),
@@ -476,6 +478,73 @@ static void CountsRemainingRowsAfterFiltering()
         if (result != expected)
         {
             throw new Exception($"unexpected output: {result}");
+        }
+    }
+    finally
+    {
+        File.Delete(tempPath);
+    }
+}
+
+static void PipesRowCommandsFromLeftToRight()
+{
+    var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
+    File.WriteAllText(tempPath, """
+        name,age
+        Ada,36
+        Grace,29
+        Katherine,41
+        Barbara,32
+        Dorothy,25
+        Frances,38
+        """.ReplaceLineEndings("\r\n"));
+
+    try
+    {
+        using var output = new MemoryStream();
+        using var stderr = new StringWriter();
+        var exitCode = SliceApp.Run([tempPath, "where", "age>30", "|", "sort", "age", "|", "head", "3"], stderr, output);
+        if (exitCode != 0)
+        {
+            throw new Exception($"expected success, got exit code {exitCode}: {stderr}");
+        }
+
+        var result = Encoding.UTF8.GetString(output.ToArray());
+        var expected = $"name,age{Environment.NewLine}Barbara,32{Environment.NewLine}Ada,36{Environment.NewLine}Frances,38{Environment.NewLine}";
+        if (result != expected)
+        {
+            throw new Exception($"unexpected output: {result}");
+        }
+    }
+    finally
+    {
+        File.Delete(tempPath);
+    }
+}
+
+static void RejectsRowCommandsAfterAnAggregateResult()
+{
+    var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".csv");
+    File.WriteAllText(tempPath, """
+        name,age
+        Ada,36
+        Grace,29
+        Katherine,41
+        """.ReplaceLineEndings("\r\n"));
+
+    try
+    {
+        using var output = new MemoryStream();
+        using var stderr = new StringWriter();
+        var exitCode = SliceApp.Run([tempPath, "where", "age>30", "|", "count", "|", "head", "1"], stderr, output);
+        if (exitCode == 0)
+        {
+            throw new Exception("expected non-zero exit code");
+        }
+
+        if (!stderr.ToString().Contains("aggregate result", StringComparison.Ordinal))
+        {
+            throw new Exception($"unexpected error output: {stderr}");
         }
     }
     finally
