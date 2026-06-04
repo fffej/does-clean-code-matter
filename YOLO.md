@@ -1,0 +1,1 @@
+Implement this with pure unhindered vibe coding. If in doubt? YOLO!

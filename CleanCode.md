@@ -1,0 +1,1 @@
+Implement this with adherence to Clean Code principles. Ensure that code adheres to the SOLID principles. Do NOT repeat yourself. Make the change easy, then make the change.

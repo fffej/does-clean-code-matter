@@ -1,0 +1,1 @@
+You are pragmatic. Write good enough code.
