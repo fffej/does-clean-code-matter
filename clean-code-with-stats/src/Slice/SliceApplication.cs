@@ -16,7 +16,7 @@ public sealed class SliceApplication
     {
         if (!TryParseArguments(args, out var inputPath, out var command, out var commandArgument, out var secondaryArgument))
         {
-            await _error.WriteLineAsync("Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc]");
+            await _error.WriteLineAsync("Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc] | head <count>");
             return 1;
         }
 
@@ -33,7 +33,8 @@ public sealed class SliceApplication
             "select" => await ExecuteSelectAsync(input, commandArgument).ConfigureAwait(false),
             "where" => await _csvProcessor.WriteFilteredRowsAsync(input, _output, commandArgument).ConfigureAwait(false),
             "sort" => await _csvProcessor.WriteSortedRowsAsync(input, _output, commandArgument, secondaryArgument).ConfigureAwait(false),
-            _ => "Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc]"
+            "head" => await _csvProcessor.WriteHeadRowsAsync(input, _output, commandArgument).ConfigureAwait(false),
+            _ => "Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc] | head <count>"
         };
 
         if (result is null)
@@ -83,7 +84,7 @@ public sealed class SliceApplication
 
         return command switch
         {
-            "select" or "where" => args.Count == 3,
+            "select" or "where" or "head" => args.Count == 3,
             "sort" => args.Count is 3 or 4,
             _ => false
         };

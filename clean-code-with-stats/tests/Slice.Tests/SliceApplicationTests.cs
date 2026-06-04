@@ -105,8 +105,130 @@ public sealed class SliceApplicationTests
         var exitCode = await app.RunAsync([]);
 
         Assert.AreEqual(1, exitCode);
-        StringAssert.Contains(error.ToString(), "Usage: slice <csv-file> select <columns> | where <expression>");
+        StringAssert.Contains(error.ToString(), "Usage: slice <csv-file> select <columns> | where <expression> | sort <column> [asc|desc] | head <count>");
         Assert.AreEqual(0, output.Length);
+    }
+
+    [TestMethod]
+    public async Task RunAsync_WithHeadCommand_WritesTheHeaderAndFirstNDataRows()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.csv");
+        var input = string.Join("\r\n", [
+            "name,age,city",
+            "Ada,36,London",
+            "Bob,29,Paris",
+            "Carol,31,Berlin",
+            "Dave,30,Rome",
+            "Eve,25,Oslo",
+            "Frank,41,Dublin",
+            string.Empty
+        ]);
+        var expected = string.Join("\r\n", [
+            "name,age,city",
+            "Ada,36,London",
+            "Bob,29,Paris",
+            "Carol,31,Berlin",
+            "Dave,30,Rome",
+            "Eve,25,Oslo",
+            string.Empty
+        ]);
+        var inputBytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(input);
+        var expectedBytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(expected);
+
+        try
+        {
+            await File.WriteAllBytesAsync(tempFile, inputBytes);
+
+            await using var output = new MemoryStream();
+            var app = new SliceApplication(output, TextWriter.Null);
+
+            var exitCode = await app.RunAsync([tempFile, "head", "5"]);
+
+            Assert.AreEqual(0, exitCode);
+            CollectionAssert.AreEqual(expectedBytes, output.ToArray());
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    [TestMethod]
+    public async Task RunAsync_WithHeadCommandAndFewerRowsThanRequested_WritesAllRows()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.csv");
+        var input = string.Join("\r\n", [
+            "name,age",
+            "Ada,36",
+            "Bob,29",
+            string.Empty
+        ]);
+        var expected = string.Join("\r\n", [
+            "name,age",
+            "Ada,36",
+            "Bob,29",
+            string.Empty
+        ]);
+        var inputBytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(input);
+        var expectedBytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(expected);
+
+        try
+        {
+            await File.WriteAllBytesAsync(tempFile, inputBytes);
+
+            await using var output = new MemoryStream();
+            var app = new SliceApplication(output, TextWriter.Null);
+
+            var exitCode = await app.RunAsync([tempFile, "head", "5"]);
+
+            Assert.AreEqual(0, exitCode);
+            CollectionAssert.AreEqual(expectedBytes, output.ToArray());
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
+    }
+
+    [TestMethod]
+    public async Task RunAsync_WithHeadCommandAndNonPositiveCount_ReturnsAnError()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.csv");
+        var input = string.Join("\r\n", [
+            "name,age",
+            "Ada,36",
+            "Bob,29",
+            string.Empty
+        ]);
+        var inputBytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(input);
+
+        try
+        {
+            await File.WriteAllBytesAsync(tempFile, inputBytes);
+
+            await using var output = new MemoryStream();
+            var error = new StringWriter();
+            var app = new SliceApplication(output, error);
+
+            var exitCode = await app.RunAsync([tempFile, "head", "0"]);
+
+            Assert.AreEqual(1, exitCode);
+            StringAssert.Contains(error.ToString(), "Invalid row count: 0");
+            Assert.AreEqual(0, output.Length);
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                File.Delete(tempFile);
+            }
+        }
     }
 
     [TestMethod]

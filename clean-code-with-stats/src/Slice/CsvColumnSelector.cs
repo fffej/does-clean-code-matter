@@ -193,6 +193,44 @@ internal sealed class CsvTableProcessor
         return null;
     }
 
+    public async Task<string?> WriteHeadRowsAsync(
+        Stream input,
+        Stream output,
+        string rowCountArgument)
+    {
+        if (!TryParsePositiveRowCount(rowCountArgument, out var rowCount, out var errorMessage))
+        {
+            return errorMessage;
+        }
+
+        using var parser = CreateParser(input);
+
+        var headers = parser.ReadFields();
+        if (headers is null)
+        {
+            return "CSV file is empty.";
+        }
+
+        await using var writer = CreateWriter(output);
+        await writer.WriteLineAsync(BuildCsvRow(headers)).ConfigureAwait(false);
+
+        while (rowCount > 0 && !parser.EndOfData)
+        {
+            var fields = parser.ReadFields();
+            if (fields is null)
+            {
+                continue;
+            }
+
+            await writer.WriteLineAsync(BuildCsvRow(fields)).ConfigureAwait(false);
+            rowCount--;
+        }
+
+        await writer.FlushAsync().ConfigureAwait(false);
+        await output.FlushAsync().ConfigureAwait(false);
+        return null;
+    }
+
     private static string BuildCsvRow(IReadOnlyList<string> fields, IReadOnlyList<int> selectedIndexes)
     {
         var selectedFields = new string[selectedIndexes.Count];
@@ -255,6 +293,22 @@ internal sealed class CsvTableProcessor
 
         sortDirection = SortDirection.Ascending;
         errorMessage = $"Invalid sort direction: {directionArgument}";
+        return false;
+    }
+
+    private static bool TryParsePositiveRowCount(
+        string rowCountArgument,
+        out int rowCount,
+        out string? errorMessage)
+    {
+        if (int.TryParse(rowCountArgument, NumberStyles.Integer, CultureInfo.InvariantCulture, out rowCount) && rowCount > 0)
+        {
+            errorMessage = null;
+            return true;
+        }
+
+        rowCount = default;
+        errorMessage = $"Invalid row count: {rowCountArgument}";
         return false;
     }
 
