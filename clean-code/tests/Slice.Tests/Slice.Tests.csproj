@@ -11,8 +11,4 @@
     <PackageReference Include="MSTest.TestAdapter" Version="3.5.1" />
     <PackageReference Include="MSTest.TestFramework" Version="3.5.1" />
   </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="../../src/Slice/Slice.csproj" />
-  </ItemGroup>
 </Project>
